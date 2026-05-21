@@ -156,11 +156,19 @@ if QWidget:
             self.apply_pipeline_ui_state()
 
         def set_export_controls(self, render_button: QPushButton, stop_button: QPushButton, open_output_button: QPushButton) -> None:
-            for button in (render_button, stop_button, open_output_button):
+            button_specs = (
+                (render_button, 132),
+                (stop_button, 84),
+                (open_output_button, 148),
+            )
+            for button, fixed_width in button_specs:
                 button.setMinimumHeight(32)
                 button.setMaximumHeight(36)
-                button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                self.export_layout.addWidget(button, 1)
+                button.setMinimumWidth(fixed_width)
+                button.setMaximumWidth(fixed_width)
+                button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+                self.export_layout.addWidget(button, 0)
+            self.export_layout.addStretch(1)
 
         def _connect_signals(self, image_button: QPushButton, sticker_button: QPushButton) -> None:
             for button in self.pipeline_buttons.values():
