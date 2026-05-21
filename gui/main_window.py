@@ -248,8 +248,10 @@ if QMainWindow:
             right_scroll.setWidget(workflow_container)
 
             right_column = QWidget()
-            right_column.setMinimumWidth(560)
-            right_column.setMaximumWidth(700)
+            right_column_min_width = 560
+            right_column_max_width = 700
+            right_column.setMinimumWidth(right_column_min_width)
+            right_column.setMaximumWidth(right_column_max_width)
             right_column_layout = QVBoxLayout(right_column)
             right_column_layout.setContentsMargins(0, 0, 0, 0)
             right_column_layout.setSpacing(6)

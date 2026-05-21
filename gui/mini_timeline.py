@@ -319,7 +319,8 @@ if QWidget:
             top_controls.addWidget(self.play_button)
             top_controls.addWidget(self.pause_button)
             top_controls.addWidget(self.stop_button)
-            top_controls.addWidget(self.generate_segments_button)
+            auto_segment_button = self.generate_segments_button
+            top_controls.addWidget(auto_segment_button)
             top_controls.addWidget(self.add_cut_button)
             top_controls.addWidget(self.undo_cut_button)
             top_controls.addWidget(self.redo_cut_button)

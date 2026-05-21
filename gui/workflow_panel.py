@@ -156,12 +156,12 @@ if QWidget:
             self.apply_pipeline_ui_state()
 
         def set_export_controls(self, render_button: QPushButton, stop_button: QPushButton, open_output_button: QPushButton) -> None:
-            button_specs = (
-                (render_button, 132),
-                (stop_button, 84),
-                (open_output_button, 148),
-            )
-            for button, fixed_width in button_specs:
+            button_widths = {
+                render_button: 132,
+                stop_button: 84,
+                open_output_button: 148,
+            }
+            for button, fixed_width in button_widths.items():
                 button.setMinimumHeight(32)
                 button.setMaximumHeight(36)
                 button.setMinimumWidth(fixed_width)
