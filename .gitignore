@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+build/
+dist/
+temp/
+renders/
+exports/
+.cache/
+
+*.mp4
+*.mov
+*.avi
+
+.env
