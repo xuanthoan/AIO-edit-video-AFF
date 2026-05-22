@@ -397,6 +397,12 @@ if QWidget:
                 QPushButton, QComboBox, QSpinBox, QDoubleSpinBox { min-height: 28px; max-height: 32px; }
                 QTextEdit, QListWidget { border: 1px solid #333; border-radius: 3px; }
                 QCheckBox, QRadioButton { min-height: 22px; }
+
+                QScrollBar:vertical { background: #14181D; width: 11px; margin: 2px; border-radius: 5px; }
+                QScrollBar:horizontal { background: #14181D; height: 11px; margin: 2px; border-radius: 5px; }
+                QScrollBar::handle:vertical, QScrollBar::handle:horizontal { background: #3A4656; min-height: 24px; min-width: 24px; border-radius: 5px; }
+                QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover { background: #55657A; }
+                QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page { background: transparent; border: none; }
                 """
             )
 else:

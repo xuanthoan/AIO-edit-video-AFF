@@ -285,7 +285,16 @@ if QWidget:
             self.setMinimumHeight(280)
             self.setMaximumHeight(460)
             self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            self.setStyleSheet("QWidget{background:#101010;color:#dedede;} QPushButton{background:#252525;color:#eee;border:1px solid #3a3a3a;padding:3px 8px;border-radius:4px;} QListWidget{background:#171717;border:1px solid #303030;border-radius:5px;}")
+            self.setStyleSheet(
+                "QWidget{background:#101010;color:#dedede;} "
+                "QPushButton{background:#252525;color:#eee;border:1px solid #3a3a3a;padding:3px 8px;border-radius:4px;} "
+                "QListWidget{background:#171717;border:1px solid #303030;border-radius:5px;} "
+                "QScrollBar:vertical{background:#14181D;width:11px;margin:2px;border-radius:5px;} "
+                "QScrollBar:horizontal{background:#14181D;height:11px;margin:2px;border-radius:5px;} "
+                "QScrollBar::handle:vertical,QScrollBar::handle:horizontal{background:#3A4656;min-height:26px;min-width:26px;border-radius:5px;} "
+                "QScrollBar::handle:vertical:hover,QScrollBar::handle:horizontal:hover{background:#55657A;} "
+                "QScrollBar::add-line,QScrollBar::sub-line,QScrollBar::add-page,QScrollBar::sub-page{background:transparent;border:none;}"
+            )
             self.current_time = 0.0
             self.video_duration = 6.0
             self._is_playback_requested = False
