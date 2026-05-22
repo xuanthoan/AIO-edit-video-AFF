@@ -300,7 +300,6 @@ if QMainWindow:
             self.workflow.highlight_list.currentRowChanged.connect(self.select_highlight_row)
             self.workflow.add_highlight_button.clicked.connect(self.add_highlight_layer)
             self.workflow.remove_highlight_button.clicked.connect(self.remove_selected_highlight)
-            self.workflow.duplicate_highlight_button.clicked.connect(self.duplicate_selected_highlight)
             self.workflow.changed.connect(self.sync_preview_panel_state)
             self.preview.previewMotionDebug.connect(self.append_log)
             self.preview.overlayMoved.connect(self.set_overlay_position)

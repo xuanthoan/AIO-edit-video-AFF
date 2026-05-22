@@ -98,7 +98,6 @@ if QWidget:
             self.highlight_list = QListWidget(); self.highlight_list.setMaximumHeight(64)
             self.add_highlight_button = QPushButton("Add Highlight")
             self.remove_highlight_button = QPushButton("Remove Selected Highlight")
-            self.duplicate_highlight_button = QPushButton("Duplicate Highlight")
             self.highlight_text = QTextEdit(); self.highlight_text.setMaximumHeight(42); self.highlight_text.setPlaceholderText("SALE 50%, BEST SELLER, MUA NGAY...")
             self.highlight_font_size = QSpinBox(); self.highlight_font_size.setRange(20, 160); self.highlight_font_size.setValue(64)
             self.highlight_style = QComboBox(); self.highlight_style.addItems(HIGHLIGHT_STYLE_NAMES)
@@ -332,7 +331,6 @@ if QWidget:
             form = self._compact_form(group)
             form.addRow("Highlights", self.highlight_list)
             form.addRow(self.add_highlight_button)
-            form.addRow(self.duplicate_highlight_button)
             form.addRow(self.remove_highlight_button)
             form.addRow("Highlight Text", self.highlight_text)
             form.addRow("Highlight Font Size", self.highlight_font_size)
@@ -372,7 +370,7 @@ if QWidget:
             for widget in (
                 self.image_list, self.watermark_text, self.watermark_font, self.watermark_color, self.watermark_density,
                 self.text, self.template, self.motion, self.highlight_list, self.highlight_text, self.highlight_style, self.highlight_animation,
-                self.add_highlight_button, self.remove_highlight_button, self.duplicate_highlight_button, self.sticker_motion, self.export_panel,
+                self.add_highlight_button, self.remove_highlight_button, self.sticker_motion, self.export_panel,
             ):
                 widget.setMinimumWidth(0)
                 widget.setMaximumWidth(16777215)
