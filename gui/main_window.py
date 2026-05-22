@@ -803,12 +803,13 @@ if QMainWindow:
             ensured = Segmenter(float(self.workflow.fallback_min.value()), float(self.workflow.fallback_max.value())).ensure_segments(
                 detected, self.current_video_path
             )
-            self.state.scene_shuffle.auto_segments = [TimelineSegment(item.start, item.end, source="auto") for item in ensured]
+            self.state.scene_shuffle.auto_segments = [TimelineSegment(item.start, item.end, source="timeline_generated") for item in ensured]
             self.state.scene_shuffle.manual_segments = []
             self.manual_cut_undo_stack.clear()
             self.manual_cut_redo_stack.clear()
             self.state.scene_shuffle.segment_video_path = str(self.current_video_path)
             self.refresh_timeline()
+            self.append_log(f"[SEGMENT] segment_source=timeline_generated")
             self.append_log(f"[SEGMENTS] Generated {len(self.state.scene_shuffle.auto_segments)} auto segments for current video.")
 
         def add_cut_at_time(self, time_seconds: float) -> None:
@@ -890,14 +891,16 @@ if QMainWindow:
             self.append_log("[SEGMENTS] Redo Cut applied.")
 
         def clear_manual_cuts(self) -> None:
-            if not self.state.scene_shuffle.manual_segments:
+            if not self.state.scene_shuffle.manual_segments and not self.state.scene_shuffle.auto_segments:
                 self.append_log("[SEGMENTS] Không có manual cuts để clear.")
                 return
             self._push_manual_cut_undo()
             self.state.scene_shuffle.manual_segments = []
-            self.state.scene_shuffle.segment_video_path = str(self.current_video_path) if self.current_video_path else None
+            self.state.scene_shuffle.auto_segments = []
+            self.state.scene_shuffle.segment_video_path = None
             self.refresh_timeline()
-            self.append_log("[SEGMENTS] Cleared manual cuts; Auto Scene Detect mode is active when auto segments are available.")
+            self.append_log("[SEGMENT] segment_source=none")
+            self.append_log("[SEGMENTS] Cleared manual/timeline-generated segments; global auto cut-shuffle mode is active.")
 
         def preview_shuffle_order(self) -> None:
             segments = [segment for segment in self._timeline_segments() if segment.enabled]
