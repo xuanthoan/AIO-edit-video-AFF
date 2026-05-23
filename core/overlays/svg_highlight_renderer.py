@@ -14,6 +14,8 @@ except ImportError:  # allows non-GUI CI imports when PySide6 is absent
 
 
 class SVGHighlightRenderer:
+    BASE_WIDTH = 1073.0
+    BASE_HEIGHT = 646.0
     def render_image(
         self,
         template_path: str,
@@ -71,20 +73,29 @@ class SVGHighlightRenderer:
             float(navy_stroke.get("x", "0")) + float(navy_stroke.get("width", "0")),
             float(navy_panel.get("x", "0")) + float(navy_panel.get("width", "0")),
         )
+        top_bound = min(float(orange_stroke.get("y", "0")), float(orange_frame.get("y", "0")), float(navy_stroke.get("y", "0")), float(navy_panel.get("y", "0")))
+        bottom_bound = max(
+            float(orange_stroke.get("y", "0")) + float(orange_stroke.get("height", "0")),
+            float(orange_frame.get("y", "0")) + float(orange_frame.get("height", "0")),
+            float(navy_stroke.get("y", "0")) + float(navy_stroke.get("height", "0")),
+            float(navy_panel.get("y", "0")) + float(navy_panel.get("height", "0")),
+        )
         inner_left = float(navy_panel.get("x", "0"))
         inner_right = float(navy_panel.get("x", "0")) + float(navy_panel.get("width", "0"))
         padding_left = max(0.0, (float(text_node.get("x", str((inner_left + inner_right) / 2))) - measured_text_width / 2.0) - inner_left)
         padding_right = max(0.0, inner_right - (float(text_node.get("x", str((inner_left + inner_right) / 2))) + measured_text_width / 2.0))
-        desired_inner_width = max(220.0, measured_text_width + padding_left + padding_right)
+        desired_inner_width = max(180.0, measured_text_width + padding_left + padding_right)
         width_delta = desired_inner_width - float(navy_panel.get("width", "0"))
 
         for node in (orange_stroke, orange_frame, navy_stroke, navy_panel):
             node.set("width", f"{max(1.0, float(node.get('width', '0')) + width_delta):.3f}")
-        new_total_width = (right_bound - left_bound) + width_delta
-        new_total_height = base_height
-        root.set("width", f"{new_total_width:.3f}")
+        visible_width = (right_bound - left_bound) + width_delta
+        visible_height = bottom_bound - top_bound
+        # Keep original vertical composition and avoid giant/tall frame.
+        new_total_height = visible_height
+        root.set("width", f"{visible_width:.3f}")
         root.set("height", f"{new_total_height:.3f}")
-        root.set("viewBox", f"0 0 {new_total_width:.3f} {new_total_height:.3f}")
+        root.set("viewBox", f"{left_bound:.3f} {top_bound:.3f} {visible_width:.3f} {new_total_height:.3f}")
 
         text_center_x = float(navy_panel.get("x", "0")) + float(navy_panel.get("width", "0")) / 2.0
         text_center_y = float(navy_panel.get("y", "0")) + float(navy_panel.get("height", "0")) / 2.0
@@ -93,8 +104,8 @@ class SVGHighlightRenderer:
         text_node.set("y", f"{text_center_y:.3f}")
         text_node.set("font-size", f"{resolved_font_size:.3f}")
 
-        target_width = max(int(canvas_width * 0.40), int(new_total_width))
-        target_height = max(1, int(round(target_width * (new_total_height / max(1.0, new_total_width)))))
+        target_width = max(int(canvas_width * 0.38), int(visible_width))
+        target_height = max(1, int(round(target_width * (new_total_height / max(1.0, visible_width)))))
         return ET.tostring(root, encoding="utf-8", xml_declaration=True), target_width, target_height
 
     @staticmethod
