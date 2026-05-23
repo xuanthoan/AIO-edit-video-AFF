@@ -285,7 +285,16 @@ if QWidget:
             self.setMinimumHeight(280)
             self.setMaximumHeight(460)
             self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            self.setStyleSheet("QWidget{background:#101010;color:#dedede;} QPushButton{background:#252525;color:#eee;border:1px solid #3a3a3a;padding:3px 8px;border-radius:4px;} QListWidget{background:#171717;border:1px solid #303030;border-radius:5px;}")
+            self.setStyleSheet(
+                "QWidget{background:#101010;color:#dedede;} "
+                "QPushButton{background:#252525;color:#eee;border:1px solid #3a3a3a;padding:3px 8px;border-radius:4px;} "
+                "QListWidget{background:#171717;border:1px solid #303030;border-radius:5px;} "
+                "QScrollBar:vertical{background:#14181D;width:11px;margin:2px;border-radius:5px;} "
+                "QScrollBar:horizontal{background:#14181D;height:11px;margin:2px;border-radius:5px;} "
+                "QScrollBar::handle:vertical,QScrollBar::handle:horizontal{background:#3A4656;min-height:26px;min-width:26px;border-radius:5px;} "
+                "QScrollBar::handle:vertical:hover,QScrollBar::handle:horizontal:hover{background:#55657A;} "
+                "QScrollBar::add-line,QScrollBar::sub-line,QScrollBar::add-page,QScrollBar::sub-page{background:transparent;border:none;}"
+            )
             self.current_time = 0.0
             self.video_duration = 6.0
             self._is_playback_requested = False
@@ -313,26 +322,32 @@ if QWidget:
             self.track_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
             self.track_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
             self.track_scroll.setMinimumHeight(188)
-            controls = QHBoxLayout()
-            controls.setContentsMargins(0, 0, 0, 0)
-            controls.setSpacing(4)
-            controls.addWidget(self.play_button)
-            controls.addWidget(self.pause_button)
-            controls.addWidget(self.stop_button)
-            controls.addWidget(self.generate_segments_button)
-            controls.addWidget(self.add_cut_button)
-            controls.addWidget(self.undo_cut_button)
-            controls.addWidget(self.redo_cut_button)
-            controls.addWidget(self.clear_manual_cuts_button)
-            controls.addWidget(self.preview_order_button)
-            controls.addWidget(self.save_timeline_button)
-            controls.addWidget(self.load_timeline_button)
-            controls.addWidget(self.time_label)
-            controls.addStretch()
+            top_controls = QHBoxLayout()
+            top_controls.setContentsMargins(0, 0, 0, 0)
+            top_controls.setSpacing(4)
+            top_controls.addWidget(self.play_button)
+            top_controls.addWidget(self.pause_button)
+            top_controls.addWidget(self.stop_button)
+            top_controls.addWidget(self.generate_segments_button)
+            top_controls.addWidget(self.add_cut_button)
+            top_controls.addWidget(self.undo_cut_button)
+            top_controls.addWidget(self.redo_cut_button)
+            top_controls.addStretch()
+
+            bottom_controls = QHBoxLayout()
+            bottom_controls.setContentsMargins(0, 0, 0, 0)
+            bottom_controls.setSpacing(4)
+            bottom_controls.addWidget(self.clear_manual_cuts_button)
+            bottom_controls.addWidget(self.preview_order_button)
+            bottom_controls.addWidget(self.save_timeline_button)
+            bottom_controls.addWidget(self.load_timeline_button)
+            bottom_controls.addWidget(self.time_label)
+            bottom_controls.addStretch()
             left = QVBoxLayout()
             left.setContentsMargins(0, 0, 0, 0)
             left.setSpacing(4)
-            left.addLayout(controls)
+            left.addLayout(top_controls)
+            left.addLayout(bottom_controls)
             left.addWidget(self.track_scroll, 1)
             layout = QHBoxLayout(self)
             layout.setContentsMargins(6, 4, 6, 4)

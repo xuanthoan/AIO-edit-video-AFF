@@ -11,7 +11,7 @@ HIGHLIGHT_STYLE_NAMES = [
     "TikTok Shop", "Modern Minimal", "Bubble Cute", "Strong Black Yellow", "Hot Deal Red", "Luxury Gold",
     "Clean White", "Black Friday", "Summer Sale", "Mega Discount", "Viral Trend", "Elegant Beauty",
     "Cosmetic Pink", "Kitchen Home", "Food Delivery", "Gaming Neon", "Fashion Streetwear", "Minimal Premium",
-    "Random Style",
+    "Simple Blue Tag SVG", "Random Style",
 ]
 
 HIGHLIGHT_ANIMATIONS = [
@@ -47,6 +47,8 @@ SALES_WORDING_LIBRARY = {
 
 class HighlightStyleManager:
     RANDOM_STYLE_NAME = "Random Style"
+    SVG_STYLE_NAME = "Simple Blue Tag SVG"
+    SVG_TEMPLATE_PATH = "assets/vector_highlight_templates/simple_blue_tag_template.svg"
     BUILT_INS = [
         TextTemplate("TikTok Bold", "#FFFFFF", "#111111", "#FF2D55", "black@0.45", ("#FFFFFF", "#111111")),
         TextTemplate("Flash Sale", "#FFFFFF", "#FF2D2D", "#FFD400", "#FFD400@0.55", ("#FFFFFF", "#FF2D2D")),
@@ -90,3 +92,9 @@ class HighlightStyleManager:
         if not values:
             values = [word for words in SALES_WORDING_LIBRARY.values() for word in words]
         return random.choice(values)
+
+    @classmethod
+    def svg_template_path(cls, name: str) -> str | None:
+        if name == cls.SVG_STYLE_NAME:
+            return cls.SVG_TEMPLATE_PATH
+        return None

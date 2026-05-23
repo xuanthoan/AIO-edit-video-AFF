@@ -27,27 +27,33 @@ class SceneShufflePipeline:
         settings = job.state.scene_shuffle
         path_matches = settings.segment_video_path in {None, str(job.input_path)}
         has_manual = bool(settings.manual_segments) and path_matches
-        has_auto_cache = bool(settings.auto_segments) and path_matches
-        source = "manual" if has_manual else "auto"
+        source = "manual" if has_manual else "none"
+        fallback_used = False
+        scene_detect_count = 0
         if settings.manual_segments and not path_matches:
             graph.debug_events.append("[SHUFFLE] timeline segments belong to another selected video; using auto scene detect")
         if has_manual:
             timeline_segments = settings.manual_segments
             graph.debug_events.append("[SHUFFLE] manual segment mode active; scene detection skipped")
-        elif has_auto_cache:
-            timeline_segments = settings.auto_segments
-            graph.debug_events.append("[SHUFFLE] using generated auto segment list")
+            scene_detect_count = len(timeline_segments)
         else:
             scenes = self.detector.detect(job.input_path, settings.sensitivity)
-            detected = Segmenter(settings.fallback_min_seconds, settings.fallback_max_seconds).ensure_segments(
-                scenes, job.input_path
-            )
-            timeline_segments = [TimelineSegment(segment.start, segment.end, source="auto") for segment in detected]
+            scene_detect_count = len(scenes)
+            fallback_used = scene_detect_count <= 1
+            detected = Segmenter(settings.fallback_min_seconds, settings.fallback_max_seconds, random=self.random).ensure_segments(scenes, job.input_path)
+            source = "auto_fallback" if fallback_used else "auto_scene"
+            timeline_segments = [TimelineSegment(segment.start, segment.end, source=source) for segment in detected]
 
         segments = self._enabled_segments(timeline_segments)
         segments = self._shuffle_segments(segments, settings.random_mode, settings.keep_first_segment)
 
         graph.shuffle_plan = ShufflePlan([ShuffleSegment(segment.start_time, segment.end_time) for segment in segments])
+        graph.debug_events.append(f"[SEGMENT] manual_segments_count={len(settings.manual_segments) if path_matches else 0}")
+        graph.debug_events.append(f"[SEGMENT] scene_detect_segments={scene_detect_count}")
+        graph.debug_events.append(f"[SEGMENT] fallback_random_split={'true' if fallback_used else 'false'}")
+        graph.debug_events.append(f"[SEGMENT] fallback_range={settings.fallback_min_seconds:.1f}-{settings.fallback_max_seconds:.1f}")
+        graph.debug_events.append(f"[SEGMENT] final_segment_count={len(segments)}")
+        graph.debug_events.append(f"[SEGMENT] segment_source={source}")
         graph.debug_events.append(
             f"[SHUFFLE] source={source} segment_count={len(segments)} order={graph.shuffle_plan.order_summary}"
         )

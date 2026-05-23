@@ -18,7 +18,7 @@ FadeCurve = Literal["linear", "smooth", "strong"]
 
 PlatformPreset = Literal["TikTok", "Instagram Reels", "YouTube Shorts", "Custom"]
 
-SegmentSource = Literal["auto", "manual"]
+SegmentSource = Literal["none", "auto", "auto_scene", "auto_fallback", "timeline_generated", "manual"]
 
 
 @dataclass(slots=True)
