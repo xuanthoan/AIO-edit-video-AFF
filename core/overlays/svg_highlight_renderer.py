@@ -24,18 +24,20 @@ class SVGHighlightRenderer:
     ):
         if QImage is None:
             raise RuntimeError("PySide6 is required to render SVG highlight assets.")
-        svg_bytes = self._build_svg_bytes(template_path, text, font_size)
+        svg_bytes, aspect_ratio = self._build_svg_bytes(template_path, text, font_size)
         renderer = QSvgRenderer(QByteArray(svg_bytes))
         if not renderer.isValid():
             raise ValueError(f"Invalid SVG renderer for template: {template_path}")
-        image = QImage(max(1, int(canvas_width)), max(1, int(canvas_height)), QImage.Format_ARGB32_Premultiplied)
+        target_width = max(1, int(canvas_width * 0.35))
+        target_height = max(1, int(round(target_width / max(aspect_ratio, 0.01))))
+        image = QImage(target_width, target_height, QImage.Format_ARGB32_Premultiplied)
         image.fill(Qt.transparent)
         painter = QPainter(image)
         renderer.render(painter)
         painter.end()
         return image
 
-    def _build_svg_bytes(self, template_path: str, text: str, font_size: float) -> bytes:
+    def _build_svg_bytes(self, template_path: str, text: str, font_size: float) -> tuple[bytes, float]:
         source_path = app_root() / template_path
         if not source_path.exists():
             raise FileNotFoundError(f"SVG template not found: {source_path}")
@@ -43,9 +45,16 @@ class SVGHighlightRenderer:
         root = ET.fromstring(raw)
         if not root.tag.lower().endswith("svg"):
             raise ValueError("Template root is not <svg>.")
+        view_box = root.attrib.get("viewBox", "").strip().replace(",", " ").split()
+        if len(view_box) != 4:
+            raise ValueError("Template missing valid viewBox.")
+        vb_width = float(view_box[2])
+        vb_height = float(view_box[3])
+        if vb_width <= 0 or vb_height <= 0:
+            raise ValueError("Template viewBox dimensions must be > 0.")
+        aspect_ratio = vb_width / vb_height
         text_node = root.find(".//*[@id='dynamic_text']")
         if text_node is None:
             raise ValueError("Template missing id='dynamic_text'.")
         text_node.text = text
-        text_node.set("font-size", str(max(8, int(font_size))))
-        return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+        return ET.tostring(root, encoding="utf-8", xml_declaration=True), aspect_ratio
