@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -39,6 +40,7 @@ class SVGHighlightRenderer:
 
     def _build_svg_bytes(self, template_path: str, text: str, font_size: float, canvas_width: int) -> tuple[bytes, int, int]:
         source_path = app_root() / template_path
+        logging.getLogger(__name__).info("[SVG] loading template path=%s", source_path.resolve())
         if not source_path.exists():
             raise FileNotFoundError(f"SVG template not found: {source_path}")
         raw = source_path.read_text(encoding="utf-8")

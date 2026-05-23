@@ -50,11 +50,18 @@ class TextEngine:
         template_name = getattr(overlay, "template", getattr(overlay, "style", ""))
         template = self.templates.get(template_name)
         font_ratio = overlay.effective_font_ratio()
-        key = (overlay.text, template_name, round(font_ratio, 6), canvas_width, canvas_height)
+        svg_template = getattr(self.templates, "svg_template_path", lambda _name: None)(template_name)
+        svg_mtime_ns = 0
+        if svg_template:
+            svg_path = self._resolve_svg_path(svg_template)
+            try:
+                svg_mtime_ns = svg_path.stat().st_mtime_ns
+            except OSError:
+                svg_mtime_ns = 0
+        key = (overlay.text, template_name, round(font_ratio, 6), canvas_width, canvas_height, svg_mtime_ns)
         path = self._asset_cache.get(key)
         if path is None or not path.exists():
             path = self._new_asset_path()
-            svg_template = getattr(self.templates, "svg_template_path", lambda _name: None)(template_name)
             if svg_template:
                 image = self.svg_renderer.render_image(
                     svg_template,
@@ -78,3 +85,9 @@ class TextEngine:
         path = Path(handle.name)
         handle.close()
         return path
+
+    @staticmethod
+    def _resolve_svg_path(template_path: str) -> Path:
+        from utils.ffmpeg_helper import app_root
+
+        return app_root() / template_path
