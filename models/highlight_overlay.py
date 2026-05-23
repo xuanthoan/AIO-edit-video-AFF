@@ -17,6 +17,8 @@ class HighlightOverlay(OverlayBase):
     style: str = "TikTok Bold"
     font_size: int = 118
     font_ratio: float = DEFAULT_HIGHLIGHT_FONT_RATIO
+    scale: float = 1.0
+    rotation: float = 0.0
 
     def effective_font_ratio(self) -> float:
         source = self.font_size if self.font_size != 118 and self.font_ratio == DEFAULT_HIGHLIGHT_FONT_RATIO else (self.font_ratio or self.font_size)
