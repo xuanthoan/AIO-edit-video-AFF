@@ -229,8 +229,8 @@ if QMainWindow:
             self._wire()
             root = QWidget(); layout = QHBoxLayout(root)
             left_splitter = QSplitter(Qt.Vertical)
-            left_splitter.setMinimumWidth(220)
-            left_splitter.setMaximumWidth(320)
+            left_splitter.setMinimumWidth(180)
+            left_splitter.setMaximumWidth(250)
             left_splitter.addWidget(self._panel("VIDEO LIST", self.queue, "panel-video-list"))
             left_splitter.addWidget(self._panel("LOG", self.log_box, "panel-log"))
             left_splitter.addWidget(self.reset_preview_cache_button)
@@ -248,8 +248,10 @@ if QMainWindow:
             right_scroll.setWidget(workflow_container)
 
             right_column = QWidget()
-            right_column.setMinimumWidth(500)
-            right_column.setMaximumWidth(620)
+            right_column_min_width = 560
+            right_column_max_width = 700
+            right_column.setMinimumWidth(right_column_min_width)
+            right_column.setMaximumWidth(right_column_max_width)
             right_column_layout = QVBoxLayout(right_column)
             right_column_layout.setContentsMargins(0, 0, 0, 0)
             right_column_layout.setSpacing(6)
@@ -264,8 +266,8 @@ if QMainWindow:
 
             layout.setContentsMargins(6, 6, 6, 6)
             layout.setSpacing(8)
-            layout.addWidget(left_splitter, 16)
-            layout.addWidget(center_column, 56)
+            layout.addWidget(left_splitter, 14)
+            layout.addWidget(center_column, 58)
             layout.addWidget(right_column, 28)
             self.setCentralWidget(root)
             self.preview_playback.reset()
@@ -298,7 +300,6 @@ if QMainWindow:
             self.workflow.highlight_list.currentRowChanged.connect(self.select_highlight_row)
             self.workflow.add_highlight_button.clicked.connect(self.add_highlight_layer)
             self.workflow.remove_highlight_button.clicked.connect(self.remove_selected_highlight)
-            self.workflow.duplicate_highlight_button.clicked.connect(self.duplicate_selected_highlight)
             self.workflow.changed.connect(self.sync_preview_panel_state)
             self.preview.previewMotionDebug.connect(self.append_log)
             self.preview.overlayMoved.connect(self.set_overlay_position)
@@ -802,12 +803,13 @@ if QMainWindow:
             ensured = Segmenter(float(self.workflow.fallback_min.value()), float(self.workflow.fallback_max.value())).ensure_segments(
                 detected, self.current_video_path
             )
-            self.state.scene_shuffle.auto_segments = [TimelineSegment(item.start, item.end, source="auto") for item in ensured]
+            self.state.scene_shuffle.auto_segments = [TimelineSegment(item.start, item.end, source="timeline_generated") for item in ensured]
             self.state.scene_shuffle.manual_segments = []
             self.manual_cut_undo_stack.clear()
             self.manual_cut_redo_stack.clear()
             self.state.scene_shuffle.segment_video_path = str(self.current_video_path)
             self.refresh_timeline()
+            self.append_log(f"[SEGMENT] segment_source=timeline_generated")
             self.append_log(f"[SEGMENTS] Generated {len(self.state.scene_shuffle.auto_segments)} auto segments for current video.")
 
         def add_cut_at_time(self, time_seconds: float) -> None:
@@ -889,14 +891,16 @@ if QMainWindow:
             self.append_log("[SEGMENTS] Redo Cut applied.")
 
         def clear_manual_cuts(self) -> None:
-            if not self.state.scene_shuffle.manual_segments:
+            if not self.state.scene_shuffle.manual_segments and not self.state.scene_shuffle.auto_segments:
                 self.append_log("[SEGMENTS] Không có manual cuts để clear.")
                 return
             self._push_manual_cut_undo()
             self.state.scene_shuffle.manual_segments = []
-            self.state.scene_shuffle.segment_video_path = str(self.current_video_path) if self.current_video_path else None
+            self.state.scene_shuffle.auto_segments = []
+            self.state.scene_shuffle.segment_video_path = None
             self.refresh_timeline()
-            self.append_log("[SEGMENTS] Cleared manual cuts; Auto Scene Detect mode is active when auto segments are available.")
+            self.append_log("[SEGMENT] segment_source=none")
+            self.append_log("[SEGMENTS] Cleared manual/timeline-generated segments; global auto cut-shuffle mode is active.")
 
         def preview_shuffle_order(self) -> None:
             segments = [segment for segment in self._timeline_segments() if segment.enabled]

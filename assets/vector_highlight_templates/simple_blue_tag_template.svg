@@ -1,0 +1,10 @@
+<svg id="simple_blue_tag_template" xmlns="http://www.w3.org/2000/svg" width="960" height="320" viewBox="0 0 960 320">
+  <g id="sticker_root">
+    <rect id="orange_stroke" x="24" y="20" width="912" height="280" rx="44" fill="#FF9A2F"/>
+    <rect id="orange_frame" x="36" y="32" width="888" height="256" rx="38" fill="#FFC269"/>
+    <rect id="navy_stroke" x="54" y="50" width="852" height="220" rx="32" fill="#112A52"/>
+    <rect id="navy_panel" x="68" y="64" width="824" height="192" rx="26" fill="#17407A"/>
+    <text id="dynamic_text" x="480" y="168" text-anchor="middle" dominant-baseline="middle"
+          fill="#FFFFFF" font-family="Montserrat, Poppins, Arial" font-size="96" font-weight="800">SALE</text>
+  </g>
+</svg>

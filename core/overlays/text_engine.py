@@ -6,6 +6,7 @@ from pathlib import Path
 
 from core.normalized_layout import NormalizedLayoutEngine
 from core.overlays.motion_engine import MotionEngine
+from core.overlays.svg_highlight_renderer import SVGHighlightRenderer
 from core.overlays.template_manager import TemplateManager
 from core.overlays.typography_engine import SocialTypographyRenderer
 from models.text_overlay import TextOverlay
@@ -17,6 +18,7 @@ class TextEngine:
         self.prefix = prefix
         self.motion = MotionEngine()
         self.typography = SocialTypographyRenderer()
+        self.svg_renderer = SVGHighlightRenderer()
         self.layout = NormalizedLayoutEngine()
         self._asset_cache: dict[tuple[str, str, float, int, int], Path] = {}
 
@@ -52,7 +54,19 @@ class TextEngine:
         path = self._asset_cache.get(key)
         if path is None or not path.exists():
             path = self._new_asset_path()
-            self.typography.render_png(path, overlay.text, template, font_ratio, canvas_width, canvas_height)
+            svg_template = getattr(self.templates, "svg_template_path", lambda _name: None)(template_name)
+            if svg_template:
+                image = self.svg_renderer.render_image(
+                    svg_template,
+                    overlay.text,
+                    self.layout.denormalize_font_size(font_ratio, canvas_height),
+                    canvas_width,
+                    canvas_height,
+                )
+                if not image.save(str(path), "PNG"):
+                    raise RuntimeError(f"Unable to write SVG highlight PNG: {path}")
+            else:
+                self.typography.render_png(path, overlay.text, template, font_ratio, canvas_width, canvas_height)
             self._asset_cache[key] = path
         if temp_files is not None and path not in temp_files:
             temp_files.append(path)

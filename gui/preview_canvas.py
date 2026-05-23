@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from core.overlays.highlight_library import HighlightStyleManager
 from core.overlays.template_manager import TemplateManager
+from core.overlays.svg_highlight_renderer import SVGHighlightRenderer
 from core.overlays.motion_engine import MotionEngine
 from core.overlays.transform import OverlayTransform
 from core.overlays.typography_engine import SocialTypographyRenderer
@@ -44,6 +45,7 @@ if QLabel:
             self._template_manager = TemplateManager()
             self._highlight_style_manager = HighlightStyleManager()
             self._typography_renderer = SocialTypographyRenderer()
+            self._svg_highlight_renderer = SVGHighlightRenderer()
             self._watermark_renderer = WatermarkTextRenderer()
             self._motion_engine = MotionEngine()
             self._current_time = 0.0
@@ -349,13 +351,33 @@ if QLabel:
             key = (kind, str(data["text"]), str(data["template"]), float(data["font_size"]), round(canvas.width()), round(canvas.height()))
             pixmap = self._typography_pixmap_cache.get(key)
             if pixmap is None:
-                image = self._typography_renderer.render_image(
-                    str(data["text"]),
-                    template,
-                    float(data["font_size"]),
-                    round(canvas.width()),
-                    round(canvas.height()),
-                )
+                svg_template = getattr(template_manager, "svg_template_path", lambda _name: None)(str(data["template"]))
+                try:
+                    if svg_template:
+                        image = self._svg_highlight_renderer.render_image(
+                            svg_template,
+                            str(data["text"]),
+                            self._highlight_font_pixels(float(data["font_size"]), round(canvas.height())),
+                            round(canvas.width()),
+                            round(canvas.height()),
+                        )
+                    else:
+                        image = self._typography_renderer.render_image(
+                            str(data["text"]),
+                            template,
+                            float(data["font_size"]),
+                            round(canvas.width()),
+                            round(canvas.height()),
+                        )
+                except Exception as exc:
+                    image = self._typography_renderer.render_image(
+                        "SVG ERROR",
+                        template,
+                        float(data["font_size"]),
+                        round(canvas.width()),
+                        round(canvas.height()),
+                    )
+                    self.previewMotionDebug.emit(f"[SVG][ERROR] {exc}")
                 pixmap = QPixmap.fromImage(image)
                 self._typography_pixmap_cache[key] = pixmap
             data["w"] = pixmap.width()
@@ -374,6 +396,12 @@ if QLabel:
                 painter.drawRect(QRectF(center.x() - transformed.width() / 2, center.y() - transformed.height() / 2, transformed.width(), transformed.height()))
             painter.restore()
             self._emit_motion_debug(kind, data, transform)
+
+        @staticmethod
+        def _highlight_font_pixels(font_ratio: float, canvas_height: int) -> int:
+            if font_ratio <= 1.0:
+                return max(8, round(font_ratio * canvas_height))
+            return max(8, round(font_ratio))
 
         def _draw_sticker_overlay(self, painter: QPainter) -> None:
             data = self._overlays["sticker"]
