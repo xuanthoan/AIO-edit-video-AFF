@@ -126,9 +126,9 @@ class SVGHighlightRenderer:
         first_line_y = panel_y + (panel_h - text_block_h) / 2.0 + line_height * 0.8
         line_y_values = [first_line_y + i * line_height for i in range(len(lines))]
 
-        min_target_width = canvas_width * 0.40
-        preferred_target_width = canvas_width * 0.50
-        max_target_width = canvas_width * 0.55
+        min_target_width = canvas_width * 1.00
+        preferred_target_width = canvas_width * 1.25
+        max_target_width = canvas_width * 1.375
         target_width = max(1, int(round(max(min_target_width, min(preferred_target_width, max_target_width)))))
         target_height = max(1, int(round(target_width * (visible_height / max(1.0, visible_width)))))
 
