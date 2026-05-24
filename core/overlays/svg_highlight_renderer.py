@@ -19,7 +19,7 @@ except ImportError:  # allows non-GUI CI imports when PySide6 is absent
 class SVGHighlightRenderer:
     BASE_WIDTH = 1073.0
     BASE_HEIGHT = 646.0
-    SIMPLE_BLUE_TAG_DEFAULT_SCALE_MULTIPLIER = 0.20
+    SIMPLE_BLUE_TAG_DEFAULT_SCALE_MULTIPLIER = 0.60
     _logger = logging.getLogger(__name__)
 
     def render_image(
