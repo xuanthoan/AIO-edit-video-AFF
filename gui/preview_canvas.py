@@ -412,11 +412,6 @@ if QLabel:
             display_w = max(1, round(transformed.width() * base_scale))
             display_h = max(1, round(transformed.height() * base_scale))
             display = transformed.scaled(display_w, display_h, Qt.KeepAspectRatio, Qt.SmoothTransformation) if abs(base_scale - 1.0) > 0.001 else transformed
-            painter.save()
-            painter.translate(center)
-            painter.rotate(float(data.get("rotation", 0.0)))
-            painter.setOpacity(transform.opacity)
-            painter.drawPixmap(QPointF(-display.width() / 2, -display.height() / 2), display)
             current_rotation = float(data.get("rotation", 0.0))
             visual_points = self._rotated_rect_points(center, display.width(), display.height(), current_rotation)
             self._highlight_visual_centers[kind] = center
@@ -428,9 +423,15 @@ if QLabel:
                     (visual_points["top_right"].y() + visual_points["bottom_right"].y()) / 2.0,
                 ),
             }
+            painter.save()
+            painter.translate(center)
+            painter.rotate(current_rotation)
+            painter.setOpacity(transform.opacity)
+            painter.drawPixmap(QPointF(-display.width() / 2, -display.height() / 2), display)
+            painter.restore()
             if kind == self._selected_highlight_key:
+                painter.save()
                 painter.setOpacity(1.0)
-                rect = QRectF(center.x() - display.width() / 2, center.y() - display.height() / 2, display.width(), display.height())
                 painter.setPen(QPen(QColor(255, 220, 80, 210), 2, Qt.DashLine))
                 painter.drawPolygon(
                     QPolygonF(
@@ -443,7 +444,17 @@ if QLabel:
                     )
                 )
                 self._draw_highlight_handles(painter, kind)
-            painter.restore()
+                canvas_rect = self._canvas_rect()
+                painter.restore()
+                self.previewMotionDebug.emit(
+                    f"[SVG_HANDLE] item boundingRect={display.width()}x{display.height()} center=({center.x():.1f},{center.y():.1f}) "
+                    f"sceneBoundingRect=({min(p.x() for p in visual_points.values()):.1f},{min(p.y() for p in visual_points.values()):.1f},"
+                    f"{(max(p.x() for p in visual_points.values())-min(p.x() for p in visual_points.values())):.1f},"
+                    f"{(max(p.y() for p in visual_points.values())-min(p.y() for p in visual_points.values())):.1f}) canvas=({canvas_rect.left():.1f},{canvas_rect.top():.1f}) "
+                    f"delete=({self._highlight_visual_handles[kind]['delete'].x():.1f},{self._highlight_visual_handles[kind]['delete'].y():.1f}) "
+                    f"resize=({self._highlight_visual_handles[kind]['resize'].x():.1f},{self._highlight_visual_handles[kind]['resize'].y():.1f}) "
+                    f"rotate=({self._highlight_visual_handles[kind]['rotate'].x():.1f},{self._highlight_visual_handles[kind]['rotate'].y():.1f})"
+                )
             self._emit_motion_debug(kind, data, transform)
 
         @staticmethod
