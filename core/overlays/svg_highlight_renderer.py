@@ -41,7 +41,9 @@ class SVGHighlightRenderer:
         image = QImage(max(1, int(output_width)), max(1, int(output_height)), QImage.Format_ARGB32_Premultiplied)
         image.fill(Qt.transparent)
         painter = QPainter(image)
+        painter.save()
         renderer.render(painter)
+        painter.restore()
         self._paint_text(painter, text_layout, output_width, output_height)
         painter.end()
         return image
@@ -142,38 +144,60 @@ class SVGHighlightRenderer:
         self._dump_debug_svg(svg_bytes)
 
         text_layout = {
+            "raw_text": raw_text,
             "lines": lines,
             "font_size": resolved_font_size,
             "text_x": text_x,
             "line_y_values": line_y_values,
+            "panel_rect": (float(navy_panel.get("x", "0")), float(navy_panel.get("y", "0")), float(navy_panel.get("width", "0")), float(navy_panel.get("height", "0"))),
+            "padding_left": padding_left,
             "view_box": (left_bound, top_bound, visible_width, visible_height),
         }
         return svg_bytes, target_width, target_height, text_layout
 
     def _paint_text(self, painter: QPainter, layout: dict, image_w: int, image_h: int) -> None:
         lines = layout.get("lines") or [" "]
+        raw_text = str(layout.get("raw_text", ""))
         font_size = float(layout.get("font_size", 24.0))
         left, top, vb_w, vb_h = layout.get("view_box", (0.0, 0.0, 1.0, 1.0))
+        panel_x, panel_y, panel_w, panel_h = layout.get("panel_rect", (0.0, 0.0, vb_w, vb_h))
         sx = image_w / max(1.0, vb_w)
         sy = image_h / max(1.0, vb_h)
 
+        font_px = max(1, int(round(font_size * sy)))
         font = QFont("Montserrat")
         font.setBold(True)
-        font.setPixelSize(max(1, int(round(font_size * sy))))
+        font.setPixelSize(font_px)
         if not QFontInfo(font).family().lower().startswith("montserrat"):
             font = QFont("Arial")
             font.setBold(True)
-            font.setPixelSize(max(1, int(round(font_size * sy))))
+            font.setPixelSize(font_px)
 
         painter.setRenderHint(QPainter.TextAntialiasing, True)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setClipping(False)
         painter.setPen(QColor("#FFFFFF"))
         painter.setFont(font)
 
-        text_x_px = (float(layout.get("text_x", 0.0)) - left) * sx
-        for i, line in enumerate(lines):
-            y = float(layout.get("line_y_values", [0.0])[i])
-            y_px = (y - top) * sy
-            painter.drawText(text_x_px, y_px, line if line else " ")
+        metrics = QFontMetricsF(font)
+        line_spacing = metrics.lineSpacing()
+        text_block_h = line_spacing * len(lines)
+        panel_y_px = (panel_y - left * 0 + 0 - top) * sy
+        panel_h_px = panel_h * sy
+        baseline_y = panel_y_px + (panel_h_px - text_block_h) / 2.0 + metrics.ascent()
+        text_x_px = ((panel_x + float(layout.get("padding_left", 60.0))) - left) * sx
+
+        try:
+            for i, line in enumerate(lines):
+                painter.drawText(text_x_px, baseline_y + i * line_spacing, line if line else " ")
+        except Exception as exc:
+            self._logger.exception("[SVG_TEXT] paint primary failed, fallback Arial draw. err=%s", exc)
+            fallback = QFont("Arial")
+            fallback.setBold(True)
+            fallback.setPixelSize(font_px)
+            painter.setFont(fallback)
+            fallback_text = raw_text if raw_text.strip() else " "
+            painter.drawText(text_x_px, baseline_y, fallback_text)
 
     @staticmethod
     def _dump_debug_svg(svg_bytes: bytes) -> None:
