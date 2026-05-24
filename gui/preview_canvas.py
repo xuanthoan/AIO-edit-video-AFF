@@ -17,15 +17,17 @@ from models.watermark_overlay import WatermarkOverlay
 
 try:
     from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-    from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
+    from PySide6.QtGui import QColor, QPainter, QPen, QPixmap, QPolygonF
     from PySide6.QtWidgets import QLabel
 except ImportError:  # lets non-GUI CI import architecture modules without PySide6 installed
-    QPointF = QRectF = Qt = Signal = QColor = QPainter = QPen = QPixmap = QLabel = None
+    QPointF = QRectF = Qt = Signal = QColor = QPainter = QPen = QPixmap = QPolygonF = QLabel = None
 
 
 if QLabel:
     class PreviewCanvas(QLabel):
         overlayMoved = Signal(str, float, float)
+        overlayTransformed = Signal(str, float, float)
+        overlayDeleteRequested = Signal(str)
         previewMotionDebug = Signal(str)
         SNAP_THRESHOLD = 10
 
@@ -65,6 +67,10 @@ if QLabel:
                 "sticker": {"active": False, "x": 0.5, "y": 0.55, "w": 120, "h": 120, "pixmap": None, "scale": 0.16, "rotation": 0.0, "motion": "None", "motion_speed": 1.0, "motion_strength": 1.0, "start": 0.0, "end": 3.0},
             }
             self._drag_kind: str | None = None
+            self._handle_drag: dict | None = None
+            self._handle_radius = 10.0
+            self._highlight_visual_handles: dict[str, dict[str, QPointF]] = {}
+            self._highlight_visual_centers: dict[str, QPointF] = {}
 
         def set_safe_area_options(self, platform: str = "TikTok", enabled: bool = True, snap_enabled: bool = True) -> None:
             self._safe_area_platform = platform
@@ -149,6 +155,8 @@ if QLabel:
         def set_highlight_layers(self, layers: list[dict], selected_key: str | None = None) -> None:
             for key in [key for key in self._overlays if key.startswith("highlight_")]:
                 self._overlays.pop(key, None)
+            self._highlight_visual_handles = {}
+            self._highlight_visual_centers = {}
             self._selected_highlight_key = selected_key
             for index, layer in enumerate(layers, start=1):
                 key = str(layer.get("key", f"highlight_{index}"))
@@ -223,14 +231,26 @@ if QLabel:
         def mousePressEvent(self, event):
             if event.button() != Qt.LeftButton:
                 return super().mousePressEvent(event)
+            pos = event.position()
+            if self._selected_highlight_key:
+                handle = self._hit_selected_handle(pos)
+                if handle == "delete":
+                    self.overlayDeleteRequested.emit(self._selected_highlight_key)
+                    return
+                if handle in {"resize", "rotate"}:
+                    self._start_handle_drag(handle, pos)
+                    return
             highlight_keys = [key for key in self._overlays if key.startswith("highlight_")]
             for kind in ("sticker", *highlight_keys, "highlight", "text"):
-                if self._overlay_rect(kind).contains(event.position()):
+                if self._overlay_rect(kind).contains(pos):
                     self._drag_kind = kind
                     return
             return super().mousePressEvent(event)
 
         def mouseMoveEvent(self, event):
+            if self._handle_drag:
+                self._update_handle_drag(event.position())
+                return
             if not self._drag_kind:
                 return super().mouseMoveEvent(event)
             x = event.position().x()
@@ -254,6 +274,7 @@ if QLabel:
 
         def mouseReleaseEvent(self, event):
             self._drag_kind = None
+            self._handle_drag = None
             self._snap_x = None
             self._snap_y = None
             self.update()
@@ -387,13 +408,41 @@ if QLabel:
                 canvas.left() + float(data["x"]) * canvas.width() + transform.x_offset,
                 canvas.top() + float(data["y"]) * canvas.height() + transform.y_offset,
             )
+            base_scale = float(data.get("scale", 1.0))
+            display_w = max(1, round(transformed.width() * base_scale))
+            display_h = max(1, round(transformed.height() * base_scale))
+            display = transformed.scaled(display_w, display_h, Qt.KeepAspectRatio, Qt.SmoothTransformation) if abs(base_scale - 1.0) > 0.001 else transformed
             painter.save()
+            painter.translate(center)
+            painter.rotate(float(data.get("rotation", 0.0)))
             painter.setOpacity(transform.opacity)
-            painter.drawPixmap(QPointF(center.x() - transformed.width() / 2, center.y() - transformed.height() / 2), transformed)
+            painter.drawPixmap(QPointF(-display.width() / 2, -display.height() / 2), display)
+            current_rotation = float(data.get("rotation", 0.0))
+            visual_points = self._rotated_rect_points(center, display.width(), display.height(), current_rotation)
+            self._highlight_visual_centers[kind] = center
+            self._highlight_visual_handles[kind] = {
+                "delete": visual_points["top_left"],
+                "resize": visual_points["top_right"],
+                "rotate": QPointF(
+                    (visual_points["top_right"].x() + visual_points["bottom_right"].x()) / 2.0,
+                    (visual_points["top_right"].y() + visual_points["bottom_right"].y()) / 2.0,
+                ),
+            }
             if kind == self._selected_highlight_key:
                 painter.setOpacity(1.0)
+                rect = QRectF(center.x() - display.width() / 2, center.y() - display.height() / 2, display.width(), display.height())
                 painter.setPen(QPen(QColor(255, 220, 80, 210), 2, Qt.DashLine))
-                painter.drawRect(QRectF(center.x() - transformed.width() / 2, center.y() - transformed.height() / 2, transformed.width(), transformed.height()))
+                painter.drawPolygon(
+                    QPolygonF(
+                        [
+                            visual_points["top_left"],
+                            visual_points["top_right"],
+                            visual_points["bottom_right"],
+                            visual_points["bottom_left"],
+                        ]
+                    )
+                )
+                self._draw_highlight_handles(painter, kind)
             painter.restore()
             self._emit_motion_debug(kind, data, transform)
 
@@ -403,6 +452,85 @@ if QLabel:
                 return max(8, round(font_ratio * canvas_height))
             return max(8, round(font_ratio))
 
+
+        def _selected_handle_points(self) -> dict[str, QPointF]:
+            if not self._selected_highlight_key or self._selected_highlight_key not in self._overlays:
+                return {}
+            return self._highlight_visual_handles.get(self._selected_highlight_key, {})
+
+        def _draw_highlight_handles(self, painter: QPainter, key: str) -> None:
+            points = self._highlight_visual_handles.get(key, {})
+            if not points:
+                return
+            configs = {
+                "delete": (QColor(235, 70, 70), "✕"),
+                "resize": (QColor(70, 150, 255), "↘"),
+                "rotate": (QColor(175, 95, 255), "⟳"),
+            }
+            painter.save()
+            for name, point in points.items():
+                color, icon = configs[name]
+                painter.setBrush(color)
+                painter.setPen(QPen(QColor(255,255,255,240), 1.5))
+                painter.drawEllipse(point, self._handle_radius, self._handle_radius)
+                painter.setPen(QPen(QColor(255,255,255), 1))
+                painter.drawText(QRectF(point.x()-8, point.y()-8, 16, 16), Qt.AlignCenter, icon)
+            painter.restore()
+
+        def _hit_selected_handle(self, pos: QPointF) -> str | None:
+            for name, point in self._selected_handle_points().items():
+                if math.hypot(pos.x() - point.x(), pos.y() - point.y()) <= self._handle_radius + 2:
+                    return name
+            return None
+
+        def _start_handle_drag(self, handle: str, pos: QPointF) -> None:
+            key = self._selected_highlight_key
+            if not key or key not in self._overlays:
+                return
+            center = self._highlight_visual_centers.get(key)
+            if center is None:
+                return
+            data = self._overlays[key]
+            self._handle_drag = {"handle": handle, "key": key, "center": center, "base_scale": float(data.get("scale", 1.0)), "base_rotation": float(data.get("rotation", 0.0)), "start_distance": max(1.0, math.hypot(pos.x()-center.x(), pos.y()-center.y())), "start_angle": math.degrees(math.atan2(pos.y()-center.y(), pos.x()-center.x()))}
+
+        def _update_handle_drag(self, pos: QPointF) -> None:
+            if not self._handle_drag:
+                return
+            data = self._handle_drag
+            center = data["center"]
+            if data["handle"] == "resize":
+                dist = max(1.0, math.hypot(pos.x()-center.x(), pos.y()-center.y()))
+                scale = data["base_scale"] * (dist / data["start_distance"])
+                scale = min(4.0, max(0.2, scale))
+                self._overlays[data["key"]]["scale"] = scale
+                self.overlayTransformed.emit(data["key"], scale, self._overlays[data["key"]].get("rotation", 0.0))
+            elif data["handle"] == "rotate":
+                angle = math.degrees(math.atan2(pos.y()-center.y(), pos.x()-center.x()))
+                rotation = data["base_rotation"] + (angle - data["start_angle"])
+                self._overlays[data["key"]]["rotation"] = rotation
+                self.overlayTransformed.emit(data["key"], self._overlays[data["key"]].get("scale", 1.0), rotation)
+            self.update()
+
+        @staticmethod
+        def _rotated_rect_points(center: QPointF, width: float, height: float, rotation_deg: float) -> dict[str, QPointF]:
+            half_w = width / 2.0
+            half_h = height / 2.0
+            rad = math.radians(rotation_deg)
+            cos_a = math.cos(rad)
+            sin_a = math.sin(rad)
+
+            def _map(dx: float, dy: float) -> QPointF:
+                return QPointF(
+                    center.x() + dx * cos_a - dy * sin_a,
+                    center.y() + dx * sin_a + dy * cos_a,
+                )
+
+            return {
+                "top_left": _map(-half_w, -half_h),
+                "top_right": _map(half_w, -half_h),
+                "bottom_right": _map(half_w, half_h),
+                "bottom_left": _map(-half_w, half_h),
+            }
         def _draw_sticker_overlay(self, painter: QPainter) -> None:
             data = self._overlays["sticker"]
             pixmap = data.get("pixmap")
