@@ -19,6 +19,7 @@ except ImportError:  # allows non-GUI CI imports when PySide6 is absent
 class SVGHighlightRenderer:
     BASE_WIDTH = 1073.0
     BASE_HEIGHT = 646.0
+    SIMPLE_BLUE_TAG_DEFAULT_SCALE_MULTIPLIER = 0.20
     _logger = logging.getLogger(__name__)
 
     def render_image(
@@ -124,8 +125,8 @@ class SVGHighlightRenderer:
         first_line_y = panel_y + (panel_h - text_block_h) / 2.0 + line_height * 0.8
         line_y_values = [first_line_y + i * line_height for i in range(len(lines))]
 
-        target_width = max(220, int(round(min(canvas_width * 0.45, canvas_width * 0.35))))
-        target_width = max(target_width, int(round(visible_width)))
+        base_target_width = max(220, int(round(min(canvas_width * 0.45, canvas_width * 0.35))))
+        target_width = max(1, int(round(base_target_width * self.SIMPLE_BLUE_TAG_DEFAULT_SCALE_MULTIPLIER)))
         target_height = max(1, int(round(target_width * (visible_height / max(1.0, visible_width)))))
 
         self._logger.info("[SVG_TEXT] raw input text = %r", raw_text)
