@@ -303,6 +303,8 @@ if QMainWindow:
             self.workflow.changed.connect(self.sync_preview_panel_state)
             self.preview.previewMotionDebug.connect(self.append_log)
             self.preview.overlayMoved.connect(self.set_overlay_position)
+            self.preview.overlayTransformed.connect(self.set_overlay_transform)
+            self.preview.overlayDeleteRequested.connect(self.delete_overlay_by_key)
             self.timeline.playheadChanged.connect(self.set_playhead_time)
             self.timeline.playRequested.connect(self.preview_playback.play)
             self.timeline.pauseRequested.connect(self.preview_playback.pause)
@@ -449,6 +451,20 @@ if QMainWindow:
                 self.state.overlays.sticker.y = y
 
 
+
+        def set_overlay_transform(self, kind: str, scale: float, rotation: float) -> None:
+            if kind == "highlight" or kind.startswith("highlight_"):
+                overlay = self._overlay_by_key(kind)
+                if overlay is None:
+                    return
+                overlay.scale = min(max(float(scale), 0.2), 4.0)
+                overlay.rotation = float(rotation)
+                self.update_highlight_preview()
+
+        def delete_overlay_by_key(self, key: str) -> None:
+            if key == "highlight" or key.startswith("highlight_"):
+                self.selected_highlight_index = self._highlight_index_from_key(key)
+                self.remove_selected_highlight()
         def on_watermark_text_changed(self) -> None:
             self.update_watermark_preview()
 
@@ -620,6 +636,8 @@ if QMainWindow:
                     "y": overlay.y,
                     "start": overlay.start_time,
                     "end": overlay.end_time,
+                    "scale": getattr(overlay, "scale", 1.0),
+                    "rotation": getattr(overlay, "rotation", 0.0),
                 })
             self.preview.set_highlight_layers(layers, selected_key=self._highlight_key(self.selected_highlight_index))
             self.refresh_highlight_list()

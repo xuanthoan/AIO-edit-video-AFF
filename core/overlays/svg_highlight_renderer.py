@@ -84,9 +84,9 @@ class SVGHighlightRenderer:
         )
         inner_left = float(navy_panel.get("x", "0"))
         inner_right = float(navy_panel.get("x", "0")) + float(navy_panel.get("width", "0"))
-        padding_left = max(0.0, (float(text_node.get("x", str((inner_left + inner_right) / 2))) - measured_text_width / 2.0) - inner_left)
-        padding_right = max(0.0, inner_right - (float(text_node.get("x", str((inner_left + inner_right) / 2))) + measured_text_width / 2.0))
-        desired_inner_width = max(180.0, measured_text_width + padding_left + padding_right)
+        padding_left = 60.0
+        padding_right = 60.0
+        desired_inner_width = max(float(navy_panel.get("width", "0")), measured_text_width + padding_left + padding_right)
         width_delta = desired_inner_width - float(navy_panel.get("width", "0"))
 
         for node in (orange_stroke, orange_frame, navy_stroke, navy_panel):
@@ -99,14 +99,19 @@ class SVGHighlightRenderer:
         root.set("height", f"{new_total_height:.3f}")
         root.set("viewBox", f"{left_bound:.3f} {top_bound:.3f} {visible_width:.3f} {new_total_height:.3f}")
 
-        text_center_x = float(navy_panel.get("x", "0")) + float(navy_panel.get("width", "0")) / 2.0
+        text_center_x = float(navy_panel.get("x", "0")) + padding_left
         text_center_y = float(navy_panel.get("y", "0")) + float(navy_panel.get("height", "0")) / 2.0
         text_node.text = text_value
         text_node.set("x", f"{text_center_x:.3f}")
         text_node.set("y", f"{text_center_y:.3f}")
+        text_node.set("text-anchor", "start")
+        text_node.set("dominant-baseline", "middle")
         text_node.set("font-size", f"{resolved_font_size:.3f}")
+        text_node.set("font-family", "Montserrat, Arial, sans-serif")
+        text_node.set("font-weight", "700")
 
-        target_width = max(int(canvas_width * 0.38), int(visible_width))
+        target_ratio = 0.32
+        target_width = max(1, int(round(min(canvas_width * 0.40, canvas_width * target_ratio))))
         target_height = max(1, int(round(target_width * (new_total_height / max(1.0, visible_width)))))
         return ET.tostring(root, encoding="utf-8", xml_declaration=True), target_width, target_height
 
