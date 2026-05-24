@@ -169,6 +169,8 @@ if QLabel:
                     "text": layer.get("text", ""),
                     "template": layer.get("style", "TikTok Bold"),
                     "font_size": layer.get("font_size", 118 / 1920),
+                    "scale": layer.get("scale", 1.0),
+                    "rotation": layer.get("rotation", 0.0),
                     "motion": layer.get("motion", "Pop"),
                     "motion_speed": layer.get("motion_speed", 1.25),
                     "motion_strength": layer.get("motion_strength", 1.35),

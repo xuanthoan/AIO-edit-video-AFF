@@ -59,9 +59,14 @@ class SVGHighlightRenderer:
         text_node = root.find(".//*[@id='dynamic_text']")
         if text_node is None:
             raise ValueError("Template missing id='dynamic_text'.")
-        text_value = (text or "").strip() or " "
+        raw_text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+        lines = [line for line in raw_text.split("\n")]
+        if not lines:
+            lines = [" "]
+        if all(not line.strip() for line in lines):
+            lines = [" "]
         resolved_font_size = self._resolve_font_size(text_node, font_size, base_height)
-        measured_text_width = self._measure_text_width(text_node, text_value, resolved_font_size)
+        max_line_width, line_height = self._measure_text_block(text_node, lines, resolved_font_size)
 
         orange_stroke = self._find_required(root, "orange_stroke")
         orange_frame = self._find_required(root, "orange_frame")
@@ -86,13 +91,18 @@ class SVGHighlightRenderer:
         inner_right = float(navy_panel.get("x", "0")) + float(navy_panel.get("width", "0"))
         padding_left = 60.0
         padding_right = 60.0
-        desired_inner_width = max(float(navy_panel.get("width", "0")), measured_text_width + padding_left + padding_right)
+        padding_top = 36.0
+        padding_bottom = 36.0
+        desired_inner_width = max(float(navy_panel.get("width", "0")), max_line_width + padding_left + padding_right)
+        desired_inner_height = max(float(navy_panel.get("height", "0")), (line_height * len(lines)) + padding_top + padding_bottom)
         width_delta = desired_inner_width - float(navy_panel.get("width", "0"))
+        height_delta = desired_inner_height - float(navy_panel.get("height", "0"))
 
         for node in (orange_stroke, orange_frame, navy_stroke, navy_panel):
             node.set("width", f"{max(1.0, float(node.get('width', '0')) + width_delta):.3f}")
+            node.set("height", f"{max(1.0, float(node.get('height', '0')) + height_delta):.3f}")
         visible_width = (right_bound - left_bound) + width_delta
-        visible_height = bottom_bound - top_bound
+        visible_height = (bottom_bound - top_bound) + height_delta
         # Keep original vertical composition and avoid giant/tall frame.
         new_total_height = visible_height
         root.set("width", f"{visible_width:.3f}")
@@ -100,18 +110,26 @@ class SVGHighlightRenderer:
         root.set("viewBox", f"{left_bound:.3f} {top_bound:.3f} {visible_width:.3f} {new_total_height:.3f}")
 
         text_center_x = float(navy_panel.get("x", "0")) + padding_left
-        text_center_y = float(navy_panel.get("y", "0")) + float(navy_panel.get("height", "0")) / 2.0
-        text_node.text = text_value
+        panel_y = float(navy_panel.get("y", "0"))
+        panel_h = float(navy_panel.get("height", "0"))
+        text_block_height = line_height * len(lines)
+        first_line_y = panel_y + (panel_h - text_block_height) / 2.0 + line_height * 0.8
+        text_node.clear()
         text_node.set("x", f"{text_center_x:.3f}")
-        text_node.set("y", f"{text_center_y:.3f}")
+        text_node.set("y", f"{first_line_y:.3f}")
         text_node.set("text-anchor", "start")
-        text_node.set("dominant-baseline", "middle")
+        text_node.set("dominant-baseline", "alphabetic")
         text_node.set("font-size", f"{resolved_font_size:.3f}")
         text_node.set("font-family", "Montserrat, Arial, sans-serif")
         text_node.set("font-weight", "700")
+        for i, line in enumerate(lines):
+            span = ET.SubElement(text_node, "tspan")
+            span.set("x", f"{text_center_x:.3f}")
+            span.set("y", f"{(first_line_y + i * line_height):.3f}")
+            span.text = line if line else " "
 
-        target_ratio = 0.32
-        target_width = max(1, int(round(min(canvas_width * 0.40, canvas_width * target_ratio))))
+        target_width = max(220, int(round(min(canvas_width * 0.45, canvas_width * 0.35))))
+        target_width = max(target_width, int(round(visible_width)))
         target_height = max(1, int(round(target_width * (new_total_height / max(1.0, visible_width)))))
         return ET.tostring(root, encoding="utf-8", xml_declaration=True), target_width, target_height
 
@@ -135,12 +153,15 @@ class SVGHighlightRenderer:
         return max(10.0, base_height * 0.30)
 
     @staticmethod
-    def _measure_text_width(text_node: ET.Element, text: str, font_size: float) -> float:
+    def _measure_text_block(text_node: ET.Element, lines: list[str], font_size: float) -> tuple[float, float]:
         if QFont is None or QFontMetricsF is None:
-            return max(1.0, len(text) * font_size * 0.6)
+            line_height = max(1.0, font_size * 1.2)
+            max_width = max(max(1.0, len(line) * font_size * 0.6) for line in lines)
+            return max_width, line_height
         families = [part.strip() for part in str(text_node.get("font-family", "Montserrat")).split(",") if part.strip()]
         font = QFont(families[0] if families else "Montserrat")
         font.setPixelSize(max(1, int(round(font_size))))
         font.setBold(True)
         metrics = QFontMetricsF(font)
-        return max(1.0, metrics.horizontalAdvance(text))
+        max_width = max(max(1.0, metrics.horizontalAdvance(line if line else " ")) for line in lines)
+        return max_width, max(1.0, metrics.lineSpacing())
