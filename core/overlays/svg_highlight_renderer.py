@@ -4,6 +4,10 @@ import logging
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+SVG_NS = "http://www.w3.org/2000/svg"
+XML_NS = "http://www.w3.org/XML/1998/namespace"
+ET.register_namespace("", SVG_NS)
+
 from utils.ffmpeg_helper import app_root
 
 try:
@@ -17,6 +21,7 @@ except ImportError:  # allows non-GUI CI imports when PySide6 is absent
 class SVGHighlightRenderer:
     BASE_WIDTH = 1073.0
     BASE_HEIGHT = 646.0
+    _logger = logging.getLogger(__name__)
     def render_image(
         self,
         template_path: str,
@@ -40,7 +45,7 @@ class SVGHighlightRenderer:
 
     def _build_svg_bytes(self, template_path: str, text: str, font_size: float, canvas_width: int) -> tuple[bytes, int, int]:
         source_path = app_root() / template_path
-        logging.getLogger(__name__).info("[SVG] loading template path=%s", source_path.resolve())
+        self._logger.info("[SVG] loading template path=%s", source_path.resolve())
         if not source_path.exists():
             raise FileNotFoundError(f"SVG template not found: {source_path}")
         raw = source_path.read_text(encoding="utf-8")
@@ -56,16 +61,19 @@ class SVGHighlightRenderer:
             raise ValueError("Template viewBox dimensions must be > 0.")
         base_width = vb_width
         base_height = vb_height
-        text_node = root.find(".//*[@id='dynamic_text']")
+        text_node = self._find_required(root, "dynamic_text")
         if text_node is None:
             raise ValueError("Template missing id='dynamic_text'.")
         raw_text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+        self._logger.info("[SVG_TEXT] raw input text = %r", raw_text)
         lines = [line for line in raw_text.split("\n")]
         if not lines:
             lines = [" "]
         if all(not line.strip() for line in lines):
             lines = [" "]
+        self._logger.info("[SVG_TEXT] lines = %s", lines)
         resolved_font_size = self._resolve_font_size(text_node, font_size, base_height)
+        self._logger.info("[SVG_TEXT] font size = %s", resolved_font_size)
         max_line_width, line_height = self._measure_text_block(text_node, lines, resolved_font_size)
 
         orange_stroke = self._find_required(root, "orange_stroke")
@@ -87,8 +95,6 @@ class SVGHighlightRenderer:
             float(navy_stroke.get("y", "0")) + float(navy_stroke.get("height", "0")),
             float(navy_panel.get("y", "0")) + float(navy_panel.get("height", "0")),
         )
-        inner_left = float(navy_panel.get("x", "0"))
-        inner_right = float(navy_panel.get("x", "0")) + float(navy_panel.get("width", "0"))
         padding_left = 60.0
         padding_right = 60.0
         padding_top = 36.0
@@ -114,6 +120,10 @@ class SVGHighlightRenderer:
         panel_h = float(navy_panel.get("height", "0"))
         text_block_height = line_height * len(lines)
         first_line_y = panel_y + (panel_h - text_block_height) / 2.0 + line_height * 0.8
+        line_y_values = [first_line_y + i * line_height for i in range(len(lines))]
+        self._logger.info("[SVG_TEXT] text x = %s", text_center_x)
+        self._logger.info("[SVG_TEXT] text y values = %s", [round(v, 3) for v in line_y_values])
+
         text_node.clear()
         text_node.set("x", f"{text_center_x:.3f}")
         text_node.set("y", f"{first_line_y:.3f}")
@@ -122,16 +132,51 @@ class SVGHighlightRenderer:
         text_node.set("font-size", f"{resolved_font_size:.3f}")
         text_node.set("font-family", "Montserrat, Arial, sans-serif")
         text_node.set("font-weight", "700")
-        for i, line in enumerate(lines):
-            span = ET.SubElement(text_node, "tspan")
-            span.set("x", f"{text_center_x:.3f}")
-            span.set("y", f"{(first_line_y + i * line_height):.3f}")
-            span.text = line if line else " "
+        text_node.set(f"{{{XML_NS}}}space", "preserve")
+        try:
+            for i, line in enumerate(lines):
+                span = ET.SubElement(text_node, f"{{{SVG_NS}}}tspan")
+                span.set("x", f"{text_center_x:.3f}")
+                span.set("y", f"{line_y_values[i]:.3f}")
+                span.text = line if line else " "
+        except Exception:
+            fallback_text = " ".join(part for part in lines if part) or " "
+            text_node.text = fallback_text
+
+        parent = self._find_parent(root, text_node)
+        if parent is not None:
+            parent.remove(text_node)
+            parent.append(text_node)
 
         target_width = max(220, int(round(min(canvas_width * 0.45, canvas_width * 0.35))))
         target_width = max(target_width, int(round(visible_width)))
         target_height = max(1, int(round(target_width * (new_total_height / max(1.0, visible_width)))))
-        return ET.tostring(root, encoding="utf-8", xml_declaration=True), target_width, target_height
+        svg_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+        svg_text = svg_bytes.decode("utf-8", errors="ignore")
+        self._logger.info("[SVG_TEXT] generated svg contains dynamic_text = %s", "dynamic_text" in svg_text)
+        self._logger.info("[SVG_TEXT] generated svg contains tspan = %s", "tspan" in svg_text)
+        self._dump_debug_svg(svg_bytes)
+        test_renderer = QSvgRenderer(QByteArray(svg_bytes)) if QSvgRenderer is not None and QByteArray is not None else None
+        self._logger.info("[SVG_TEXT] renderer valid = %s", bool(test_renderer and test_renderer.isValid()))
+        return svg_bytes, target_width, target_height
+
+
+    @staticmethod
+    def _find_parent(root: ET.Element, target: ET.Element) -> ET.Element | None:
+        for parent in root.iter():
+            for child in list(parent):
+                if child is target:
+                    return parent
+        return None
+
+    @staticmethod
+    def _dump_debug_svg(svg_bytes: bytes) -> None:
+        try:
+            debug_path = app_root() / "devtools/vector_preview/debug_last_svg_highlight.svg"
+            debug_path.parent.mkdir(parents=True, exist_ok=True)
+            debug_path.write_bytes(svg_bytes)
+        except Exception:
+            pass
 
     @staticmethod
     def _find_required(root: ET.Element, element_id: str) -> ET.Element:
