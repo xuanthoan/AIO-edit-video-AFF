@@ -672,6 +672,32 @@ if QLabel:
             return min(max(x, safe.x), safe.x + safe.width), min(max(y, safe.y), safe.y + safe.height)
 
 
+
+        def estimate_highlight_base_width(self, text: str, style: str, font_size: float) -> float:
+            template = self._highlight_style_manager.get(str(style))
+            canvas = self._canvas_rect()
+            svg_template = getattr(self._highlight_style_manager, "svg_template_path", lambda _name: None)(str(style))
+            try:
+                if svg_template:
+                    image = self._svg_highlight_renderer.render_image(
+                        svg_template,
+                        str(text),
+                        self._highlight_font_pixels(float(font_size), round(canvas.height())),
+                        round(canvas.width()),
+                        round(canvas.height()),
+                    )
+                else:
+                    image = self._typography_renderer.render_image(
+                        str(text),
+                        template,
+                        float(font_size),
+                        round(canvas.width()),
+                        round(canvas.height()),
+                    )
+                return float(max(1, image.width()))
+            except Exception:
+                return 1.0
+
         def canvas_rect(self) -> tuple[int, int, int, int]:
             rect = self._canvas_rect()
             return int(rect.x()), int(rect.y()), int(rect.width()), int(rect.height())

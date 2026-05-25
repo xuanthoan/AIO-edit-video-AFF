@@ -537,17 +537,20 @@ if QMainWindow:
             overlay.set_full_duration(self.video_duration)
             if overlay.style == "Simple Blue Tag SVG":
                 try:
-                    _sx, _sy, caption_width, _sh = self.preview.safe_rect()
-                    _cx, _cy, canvas_width, _ch = self.preview.canvas_rect()
-                    if canvas_width > 0:
-                        base_render_width = canvas_width * 0.74
-                        initial_scale = float(caption_width) / max(1.0, float(base_render_width))
-                        overlay.scale = max(0.2, min(4.0, initial_scale))
-                        self.append_log(f"[SVG_INIT_SIZE] caption safe zone rect = {self.preview.safe_rect()}")
-                        self.append_log(f"[SVG_INIT_SIZE] target_width = {caption_width}")
-                        self.append_log(f"[SVG_INIT_SIZE] item bounding width before scale = {base_render_width:.2f}")
-                        self.append_log(f"[SVG_INIT_SIZE] initial_scale = {overlay.scale:.4f}")
-                        self.append_log(f"[SVG_INIT_SIZE] final sceneBoundingRect ≈ width={base_render_width * overlay.scale:.2f}")
+                    caption_rect = self.preview.safe_rect()
+                    _sx, _sy, caption_width, _sh = caption_rect
+                    sticker_width_before_scale = self.preview.estimate_highlight_base_width(
+                        overlay.text,
+                        overlay.style,
+                        overlay.effective_font_ratio(),
+                    )
+                    initial_scale = float(caption_width) / max(1.0, float(sticker_width_before_scale))
+                    overlay.scale = max(0.2, min(4.0, initial_scale))
+                    self.append_log(f"[SVG_INIT_SIZE] caption_safe_zone_rect = {caption_rect}")
+                    self.append_log(f"[SVG_INIT_SIZE] caption_safe_zone_width = {caption_width}")
+                    self.append_log(f"[SVG_INIT_SIZE] sticker_width_before_scale = {sticker_width_before_scale:.2f}")
+                    self.append_log(f"[SVG_INIT_SIZE] initial_scale = {overlay.scale:.4f}")
+                    self.append_log(f"[SVG_INIT_SIZE] sticker_width_after_scale = {sticker_width_before_scale * overlay.scale:.2f}")
                 except Exception as exc:
                     self.append_log(f"[SVG_INIT_SIZE][WARN] failed to apply init width: {exc}")
             self.state.overlays.highlight_layers.append(overlay)
