@@ -31,11 +31,12 @@ class SVGHighlightRenderer:
         font_size: float,
         canvas_width: int,
         canvas_height: int,
+        initial_min_width: float = 0.0,
     ):
         if QImage is None:
             raise RuntimeError("PySide6 is required to render SVG highlight assets.")
         svg_bytes, output_width, output_height, text_layout = self._build_svg_bytes(
-            template_path, text, font_size, canvas_width
+            template_path, text, font_size, canvas_width, initial_min_width
         )
         renderer = QSvgRenderer(QByteArray(svg_bytes))
         if not renderer.isValid():
@@ -50,7 +51,7 @@ class SVGHighlightRenderer:
         painter.end()
         return image
 
-    def _build_svg_bytes(self, template_path: str, text: str, font_size: float, canvas_width: int):
+    def _build_svg_bytes(self, template_path: str, text: str, font_size: float, canvas_width: int, initial_min_width: float = 0.0):
         source_path = app_root() / template_path
         self._logger.info("[SVG] loading template path=%s", source_path.resolve())
         if not source_path.exists():
@@ -88,7 +89,12 @@ class SVGHighlightRenderer:
 
         original_panel_width = float(navy_panel.get("width", "0"))
         original_panel_height = float(navy_panel.get("height", "0"))
-        desired_inner_width = max(original_panel_width, (max_line_width + padding_left + padding_right) * self.WIDTH_TUNING_MULTIPLIER)
+        text_required_width = max(original_panel_width, (max_line_width + padding_left + padding_right) * self.WIDTH_TUNING_MULTIPLIER)
+        applied_initial_min_width = max(0.0, float(initial_min_width or 0.0))
+        desired_inner_width = max(text_required_width, applied_initial_min_width)
+        self._logger.info("[SVG_LAYOUT] text_required_width = %s", text_required_width)
+        self._logger.info("[SVG_LAYOUT] initial_min_width = %s", applied_initial_min_width)
+        self._logger.info("[SVG_LAYOUT] final_width = %s", desired_inner_width)
         desired_inner_height = max(original_panel_height, (line_height * len(lines)) + padding_top + padding_bottom)
         width_delta = desired_inner_width - original_panel_width
         height_delta = desired_inner_height - original_panel_height

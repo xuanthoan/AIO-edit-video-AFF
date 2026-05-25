@@ -381,7 +381,7 @@ if QLabel:
                 return
             template = template_manager.get(str(data["template"]))
             canvas = self._canvas_rect()
-            key = (kind, str(data["text"]), str(data["template"]), float(data["font_size"]), round(canvas.width()), round(canvas.height()))
+            key = (kind, str(data["text"]), str(data["template"]), float(data["font_size"]), float(data.get("initial_min_width", 0.0)), round(canvas.width()), round(canvas.height()))
             pixmap = self._typography_pixmap_cache.get(key)
             if pixmap is None:
                 svg_template = getattr(template_manager, "svg_template_path", lambda _name: None)(str(data["template"]))
@@ -393,6 +393,7 @@ if QLabel:
                             self._highlight_font_pixels(float(data["font_size"]), round(canvas.height())),
                             round(canvas.width()),
                             round(canvas.height()),
+                            float(data.get("initial_min_width", 0.0)),
                         )
                     else:
                         image = self._typography_renderer.render_image(
@@ -429,6 +430,8 @@ if QLabel:
                     data["scale"] = computed_scale
                     data["initial_size_pending"] = False
                     self.overlayTransformed.emit(kind, computed_scale, float(data.get("rotation", 0.0)))
+                    self.previewMotionDebug.emit(f"[SVG_INIT_MIN] caption_safe_zone_width = {target_initial_width:.2f}")
+                    self.previewMotionDebug.emit(f"[SVG_INIT_MIN] stored_initial_min_width = {float(data.get('initial_min_width', 0.0)):.2f}")
                     self.previewMotionDebug.emit(
                         f"[SVG_INIT_DEBUG] caption_safe_zone_width={target_initial_width:.2f} sticker_width_before_scale={float(transformed.width()):.2f} "
                         f"computed_initial_scale={computed_scale:.4f} sticker_width_after_scale={float(transformed.width()) * computed_scale:.2f}"
@@ -436,6 +439,7 @@ if QLabel:
             display_w = max(1, round(transformed.width() * base_scale))
             display_h = max(1, round(transformed.height() * base_scale))
             display = transformed.scaled(display_w, display_h, Qt.KeepAspectRatio, Qt.SmoothTransformation) if abs(base_scale - 1.0) > 0.001 else transformed
+            self.previewMotionDebug.emit(f"[SVG_HANDLE] item boundingRect = {display.width()}x{display.height()}")
             current_rotation = float(data.get("rotation", 0.0))
             visual_points = self._rotated_rect_points(center, display.width(), display.height(), current_rotation)
             self._highlight_visual_centers[kind] = center
