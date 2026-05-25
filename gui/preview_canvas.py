@@ -671,6 +671,11 @@ if QLabel:
             safe = rect.sticker_safe_rect if kind == "sticker" else rect.text_safe_rect
             return min(max(x, safe.x), safe.x + safe.width), min(max(y, safe.y), safe.y + safe.height)
 
+
+        def canvas_rect(self) -> tuple[int, int, int, int]:
+            rect = self._canvas_rect()
+            return int(rect.x()), int(rect.y()), int(rect.width()), int(rect.height())
+
         def safe_rect(self) -> tuple[int, int, int, int]:
             rect = self._safe_rect("text")
             return int(rect.x()), int(rect.y()), int(rect.width()), int(rect.height())

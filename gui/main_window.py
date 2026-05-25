@@ -533,7 +533,23 @@ if QMainWindow:
         def add_highlight_layer(self) -> None:
             overlay = HighlightOverlay()
             overlay.set_font_size(int(self.workflow.highlight_font_size.value()))
+            overlay.style = self.workflow.highlight_style.currentText()
             overlay.set_full_duration(self.video_duration)
+            if overlay.style == "Simple Blue Tag SVG":
+                try:
+                    _sx, _sy, caption_width, _sh = self.preview.safe_rect()
+                    _cx, _cy, canvas_width, _ch = self.preview.canvas_rect()
+                    if canvas_width > 0:
+                        base_render_width = canvas_width * 0.74
+                        initial_scale = float(caption_width) / max(1.0, float(base_render_width))
+                        overlay.scale = max(0.2, min(4.0, initial_scale))
+                        self.append_log(f"[SVG_INIT_SIZE] caption safe zone rect = {self.preview.safe_rect()}")
+                        self.append_log(f"[SVG_INIT_SIZE] target_width = {caption_width}")
+                        self.append_log(f"[SVG_INIT_SIZE] item bounding width before scale = {base_render_width:.2f}")
+                        self.append_log(f"[SVG_INIT_SIZE] initial_scale = {overlay.scale:.4f}")
+                        self.append_log(f"[SVG_INIT_SIZE] final sceneBoundingRect ≈ width={base_render_width * overlay.scale:.2f}")
+                except Exception as exc:
+                    self.append_log(f"[SVG_INIT_SIZE][WARN] failed to apply init width: {exc}")
             self.state.overlays.highlight_layers.append(overlay)
             self.selected_highlight_index = len(self.state.overlays.highlight_layers) - 1
             self._load_selected_highlight_controls()
