@@ -19,6 +19,7 @@ except ImportError:  # allows non-GUI CI imports when PySide6 is absent
 class SVGHighlightRenderer:
     BASE_WIDTH = 1073.0
     BASE_HEIGHT = 646.0
+    TEXT_SIZE_MULTIPLIER = 3.0
     _logger = logging.getLogger(__name__)
 
     def render_image(
@@ -70,7 +71,8 @@ class SVGHighlightRenderer:
             lines = [" "]
 
         resolved_font_size = self._resolve_font_size(text_node, font_size, vb_height)
-        max_line_width, line_height = self._measure_text_block(lines, resolved_font_size)
+        effective_font_size = resolved_font_size * self.TEXT_SIZE_MULTIPLIER
+        max_line_width, line_height = self._measure_text_block(lines, effective_font_size)
 
         orange_stroke = self._find_required(root, "orange_stroke")
         orange_frame = self._find_required(root, "orange_frame")
@@ -135,6 +137,7 @@ class SVGHighlightRenderer:
         self._logger.info("[SVG_TEXT] raw input text = %r", raw_text)
         self._logger.info("[SVG_TEXT] lines = %s", lines)
         self._logger.info("[SVG_TEXT] font size = %s", resolved_font_size)
+        self._logger.info("[SVG_TEXT] effective font size = %s", effective_font_size)
         self._logger.info("[SVG_TEXT] text x = %s", text_x)
         self._logger.info("[SVG_TEXT] text y values = %s", [round(v, 3) for v in line_y_values])
 
@@ -147,7 +150,7 @@ class SVGHighlightRenderer:
         text_layout = {
             "raw_text": raw_text,
             "lines": lines,
-            "font_size": resolved_font_size,
+            "font_size": effective_font_size,
             "text_x": text_x,
             "line_y_values": line_y_values,
             "panel_rect": (float(navy_panel.get("x", "0")), float(navy_panel.get("y", "0")), float(navy_panel.get("width", "0")), float(navy_panel.get("height", "0"))),
