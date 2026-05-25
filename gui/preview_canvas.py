@@ -171,6 +171,8 @@ if QLabel:
                     "font_size": layer.get("font_size", 118 / 1920),
                     "scale": layer.get("scale", 1.0),
                     "rotation": layer.get("rotation", 0.0),
+                    "initial_min_width": layer.get("initial_min_width", 0.0),
+                    "initial_size_pending": layer.get("initial_size_pending", False),
                     "motion": layer.get("motion", "Pop"),
                     "motion_speed": layer.get("motion_speed", 1.25),
                     "motion_strength": layer.get("motion_strength", 1.35),
@@ -419,6 +421,18 @@ if QLabel:
                 canvas.top() + float(data["y"]) * canvas.height() + transform.y_offset,
             )
             base_scale = float(data.get("scale", 1.0))
+            if kind.startswith("highlight_") and bool(data.get("initial_size_pending", False)):
+                target_initial_width = float(data.get("initial_min_width", 0.0))
+                if target_initial_width > 1.0 and transformed.width() > 0:
+                    computed_scale = min(4.0, max(0.2, target_initial_width / float(transformed.width())))
+                    base_scale = computed_scale
+                    data["scale"] = computed_scale
+                    data["initial_size_pending"] = False
+                    self.overlayTransformed.emit(kind, computed_scale, float(data.get("rotation", 0.0)))
+                    self.previewMotionDebug.emit(
+                        f"[SVG_INIT_DEBUG] caption_safe_zone_width={target_initial_width:.2f} sticker_width_before_scale={float(transformed.width()):.2f} "
+                        f"computed_initial_scale={computed_scale:.4f} sticker_width_after_scale={float(transformed.width()) * computed_scale:.2f}"
+                    )
             display_w = max(1, round(transformed.width() * base_scale))
             display_h = max(1, round(transformed.height() * base_scale))
             display = transformed.scaled(display_w, display_h, Qt.KeepAspectRatio, Qt.SmoothTransformation) if abs(base_scale - 1.0) > 0.001 else transformed

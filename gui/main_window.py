@@ -538,7 +538,10 @@ if QMainWindow:
             if overlay.style == "Simple Blue Tag SVG":
                 try:
                     caption_rect = self.preview.safe_rect()
+                    video_rect = self.preview.canvas_rect()
                     _sx, _sy, caption_width, _sh = caption_rect
+                    overlay.initial_min_width = float(caption_width)
+                    overlay.initial_size_pending = True
                     sticker_width_before_scale = self.preview.estimate_highlight_base_width(
                         overlay.text,
                         overlay.style,
@@ -546,11 +549,20 @@ if QMainWindow:
                     )
                     initial_scale = float(caption_width) / max(1.0, float(sticker_width_before_scale))
                     overlay.scale = max(0.2, min(4.0, initial_scale))
-                    self.append_log(f"[SVG_INIT_SIZE] caption_safe_zone_rect = {caption_rect}")
-                    self.append_log(f"[SVG_INIT_SIZE] caption_safe_zone_width = {caption_width}")
-                    self.append_log(f"[SVG_INIT_SIZE] sticker_width_before_scale = {sticker_width_before_scale:.2f}")
-                    self.append_log(f"[SVG_INIT_SIZE] initial_scale = {overlay.scale:.4f}")
-                    self.append_log(f"[SVG_INIT_SIZE] sticker_width_after_scale = {sticker_width_before_scale * overlay.scale:.2f}")
+                    sticker_width_after_scale = sticker_width_before_scale * overlay.scale
+                    after_text_layout_width = self.preview.estimate_highlight_base_width(
+                        overlay.text,
+                        overlay.style,
+                        overlay.effective_font_ratio(),
+                    )
+                    self.append_log(f"[SVG_INIT_DEBUG] video display rect = {video_rect}")
+                    self.append_log(f"[SVG_INIT_DEBUG] green caption safe zone rect = {caption_rect}")
+                    self.append_log(f"[SVG_INIT_DEBUG] caption safe zone width = {caption_width}")
+                    self.append_log(f"[SVG_INIT_DEBUG] sticker width before scale = {sticker_width_before_scale:.2f}")
+                    self.append_log(f"[SVG_INIT_DEBUG] computed initial scale = {overlay.scale:.4f}")
+                    self.append_log(f"[SVG_INIT_DEBUG] sticker width after scale = {sticker_width_after_scale:.2f}")
+                    self.append_log(f"[SVG_INIT_DEBUG] after text layout sticker width = {after_text_layout_width:.2f}")
+                    self.append_log(f"[SVG_INIT_DEBUG] final sceneBoundingRect width = {sticker_width_after_scale:.2f}")
                 except Exception as exc:
                     self.append_log(f"[SVG_INIT_SIZE][WARN] failed to apply init width: {exc}")
             self.state.overlays.highlight_layers.append(overlay)
@@ -657,6 +669,8 @@ if QMainWindow:
                     "end": overlay.end_time,
                     "scale": getattr(overlay, "scale", 1.0),
                     "rotation": getattr(overlay, "rotation", 0.0),
+                    "initial_min_width": getattr(overlay, "initial_min_width", 0.0),
+                    "initial_size_pending": getattr(overlay, "initial_size_pending", False),
                 })
             self.preview.set_highlight_layers(layers, selected_key=self._highlight_key(self.selected_highlight_index))
             self.refresh_highlight_list()
