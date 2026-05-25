@@ -21,6 +21,7 @@ class SVGHighlightRenderer:
     BASE_HEIGHT = 646.0
     TEXT_SIZE_MULTIPLIER = 4.5
     WIDTH_TUNING_MULTIPLIER = 1.265
+    CAPTION_SAFE_ZONE_WIDTH_RATIO = 0.74
     _logger = logging.getLogger(__name__)
 
     def render_image(
@@ -129,10 +130,7 @@ class SVGHighlightRenderer:
         first_line_y = panel_y + (panel_h - text_block_h) / 2.0 + line_height * 0.8
         line_y_values = [first_line_y + i * line_height for i in range(len(lines))]
 
-        min_target_width = canvas_width * 1.00
-        preferred_target_width = canvas_width * 1.25
-        max_target_width = canvas_width * 1.375
-        target_width = max(1, int(round(max(min_target_width, min(preferred_target_width, max_target_width)))))
+        target_width = max(1, int(round(canvas_width * self.CAPTION_SAFE_ZONE_WIDTH_RATIO)))
         target_height = max(1, int(round(target_width * (visible_height / max(1.0, visible_width)))))
 
         self._logger.info("[SVG_TEXT] raw input text = %r", raw_text)
