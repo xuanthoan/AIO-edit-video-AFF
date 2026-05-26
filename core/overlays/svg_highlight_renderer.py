@@ -66,11 +66,19 @@ class SVGHighlightRenderer:
         painter.restore()
         self._paint_text(painter, text_layout, output_width, output_height)
         painter.end()
-        self._log_color_debug(mode, image)
-        self._log_layout_debug(mode, layout)
+        self._log_dynamic_layout(mode, layout, item_scale, image)
         return image
 
-    def compute_svg_highlight_layout(self, template_path: str, text: str, font_size: float, canvas_width: int) -> dict:
+    def compute_svg_highlight_layout(
+        self,
+        template_path: str,
+        text: str,
+        font_size: float,
+        canvas_width: int,
+        *,
+        style_name: str = "",
+        base_video_width_or_normalized_context: float | None = None,
+    ) -> dict:
         source_path = app_root() / template_path
         self._logger.info("[SVG] loading template path=%s", source_path.resolve())
         if not source_path.exists():
@@ -150,11 +158,8 @@ class SVGHighlightRenderer:
         first_line_y = panel_y + (panel_h - text_block_h) / 2.0 + line_height * 0.8
         line_y_values = [first_line_y + i * line_height for i in range(len(lines))]
 
-        min_target_width = canvas_width * 1.00
-        preferred_target_width = canvas_width * 1.25
-        max_target_width = canvas_width * 1.375
-        target_width = max(1, int(round(max(min_target_width, min(preferred_target_width, max_target_width)))))
-        target_height = max(1, int(round(target_width * (visible_height / max(1.0, visible_width)))))
+        target_width = max(1, int(round(visible_width)))
+        target_height = max(1, int(round(visible_height)))
 
         self._logger.info("[SVG_TEXT] raw input text = %r", raw_text)
         self._logger.info("[SVG_TEXT] lines = %s", lines)
@@ -185,7 +190,12 @@ class SVGHighlightRenderer:
             "text": raw_text,
             "text_lines": lines,
             "font_size_effective": effective_font_size,
+            "font_size_input": font_size,
+            "style_name": style_name,
+            "base_video_width_or_normalized_context": base_video_width_or_normalized_context if base_video_width_or_normalized_context is not None else canvas_width,
             "line_height": line_height,
+            "measured_text_width": max_line_width,
+            "measured_text_height": line_height * len(lines),
             "text_x": text_x,
             "text_y": line_y_values[0] if line_y_values else 0.0,
             "padding_left": padding_left,
@@ -194,8 +204,18 @@ class SVGHighlightRenderer:
             "padding_bottom": padding_bottom,
             "final_frame_width": visible_width,
             "final_frame_height": visible_height,
+            "frame_width": visible_width,
+            "frame_height": visible_height,
             "final_render_image_width": target_width,
             "final_render_image_height": target_height,
+            "render_image_width": target_width,
+            "render_image_height": target_height,
+            "padding": {
+                "left": padding_left,
+                "right": padding_right,
+                "top": padding_top,
+                "bottom": padding_bottom,
+            },
             "scale": 1.0,
             "rotation": 0.0,
             "text_layout": text_layout,
@@ -263,16 +283,27 @@ class SVGHighlightRenderer:
         except Exception:
             pass
 
-    def _log_layout_debug(self, mode: str, layout: dict) -> None:
-        tag = "SVG_LAYOUT_PREVIEW" if mode == "preview" else "SVG_LAYOUT_EXPORT"
-        self._logger.info("[%s] text=%r", tag, layout.get("text", ""))
-        self._logger.info("[%s] lines=%s", tag, layout.get("text_lines", []))
-        self._logger.info("[%s] final_frame_width=%s", tag, layout.get("final_frame_width"))
-        self._logger.info("[%s] final_frame_height=%s", tag, layout.get("final_frame_height"))
-        self._logger.info("[%s] font_size_effective=%s", tag, layout.get("font_size_effective"))
-        self._logger.info("[%s] render_image_width=%s", tag, layout.get("final_render_image_width"))
-        self._logger.info("[%s] render_image_height=%s", tag, layout.get("final_render_image_height"))
-        self._logger.info("[%s] scale=%s", tag, layout.get("scale", 1.0))
+    def _log_dynamic_layout(self, mode: str, layout: dict, item_scale: float, image) -> None:
+        fmt = int(image.format()) if image is not None else -1
+        navy = self._sample_color(image, "#123368") if image is not None else None
+        orange = self._sample_color(image, "#EC4C2C") if image is not None else None
+        final_visual_width = float(layout.get("final_render_image_width", 0.0)) * float(item_scale or 1.0)
+        final_visual_height = float(layout.get("final_render_image_height", 0.0)) * float(item_scale or 1.0)
+        self._logger.info("[SVG_DYNAMIC_LAYOUT] mode=%s", mode)
+        self._logger.info("[SVG_DYNAMIC_LAYOUT] text=%r", layout.get("text", ""))
+        self._logger.info("[SVG_DYNAMIC_LAYOUT] text_len=%s", len(str(layout.get("text", ""))))
+        self._logger.info("[SVG_DYNAMIC_LAYOUT] font_size=%s", layout.get("font_size_input", layout.get("font_size_effective")))
+        self._logger.info("[SVG_DYNAMIC_LAYOUT] measured_text_width=%s", layout.get("measured_text_width"))
+        self._logger.info("[SVG_DYNAMIC_LAYOUT] frame_width=%s", layout.get("frame_width", layout.get("final_frame_width")))
+        self._logger.info("[SVG_DYNAMIC_LAYOUT] frame_height=%s", layout.get("frame_height", layout.get("final_frame_height")))
+        self._logger.info("[SVG_DYNAMIC_LAYOUT] render_image_width=%s", layout.get("render_image_width", layout.get("final_render_image_width")))
+        self._logger.info("[SVG_DYNAMIC_LAYOUT] render_image_height=%s", layout.get("render_image_height", layout.get("final_render_image_height")))
+        self._logger.info("[SVG_DYNAMIC_LAYOUT] item_scale=%s", item_scale)
+        self._logger.info("[SVG_DYNAMIC_LAYOUT] final_visual_width=%s", final_visual_width)
+        self._logger.info("[SVG_DYNAMIC_LAYOUT] final_visual_height=%s", final_visual_height)
+        self._logger.info("[SVG_DYNAMIC_LAYOUT] qimage_format=%s", fmt)
+        self._logger.info("[SVG_DYNAMIC_LAYOUT] sample_navy_rgb=%s", navy)
+        self._logger.info("[SVG_DYNAMIC_LAYOUT] sample_orange_rgb=%s", orange)
 
     @staticmethod
     def _sample_color(image, target_hex: str) -> tuple[int, int, int] | None:
