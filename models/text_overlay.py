@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import field
 
 from core.normalized_layout import DEFAULT_FONT_RATIO, NormalizedLayoutEngine
 
@@ -16,6 +17,7 @@ class TextOverlay(OverlayBase):
     # persisted text size is font_ratio relative to output video height.
     font_size: int = 96
     font_ratio: float = DEFAULT_FONT_RATIO
+    svg_layout: dict = field(default_factory=dict)
 
     def effective_font_ratio(self) -> float:
         # Auto-migrate legacy states that only changed font_size pixels.

@@ -36,12 +36,15 @@ class SVGHighlightRenderer:
         item_scale: float = 1.0,
         preview_video_rect: tuple[float, float, float, float] | None = None,
         output_resolution: tuple[int, int] | None = None,
+        stored_layout: dict | None = None,
     ):
         if QImage is None:
             raise RuntimeError("PySide6 is required to render SVG highlight assets.")
-        svg_bytes, output_width, output_height, text_layout = self._build_svg_bytes(
-            template_path, text, font_size, canvas_width
-        )
+        layout = stored_layout or self.compute_svg_highlight_layout(template_path, text, font_size, canvas_width)
+        svg_bytes = layout["svg_bytes"]
+        output_width = int(layout["final_render_image_width"])
+        output_height = int(layout["final_render_image_height"])
+        text_layout = layout["text_layout"]
         self._logger.info("[SVG_SIZE] mode=%s", mode)
         self._logger.info("[SVG_SIZE] text=%r", text)
         self._logger.info("[SVG_SIZE] font_size=%s", font_size)
@@ -64,9 +67,10 @@ class SVGHighlightRenderer:
         self._paint_text(painter, text_layout, output_width, output_height)
         painter.end()
         self._log_color_debug(mode, image)
+        self._log_layout_debug(mode, layout)
         return image
 
-    def _build_svg_bytes(self, template_path: str, text: str, font_size: float, canvas_width: int):
+    def compute_svg_highlight_layout(self, template_path: str, text: str, font_size: float, canvas_width: int) -> dict:
         source_path = app_root() / template_path
         self._logger.info("[SVG] loading template path=%s", source_path.resolve())
         if not source_path.exists():
@@ -175,7 +179,27 @@ class SVGHighlightRenderer:
             "padding_left": padding_left,
             "view_box": (left_bound, top_bound, visible_width, visible_height),
         }
-        return svg_bytes, target_width, target_height, text_layout
+        return {
+            "svg_bytes": svg_bytes,
+            "template_path": template_path,
+            "text": raw_text,
+            "text_lines": lines,
+            "font_size_effective": effective_font_size,
+            "line_height": line_height,
+            "text_x": text_x,
+            "text_y": line_y_values[0] if line_y_values else 0.0,
+            "padding_left": padding_left,
+            "padding_right": padding_right,
+            "padding_top": padding_top,
+            "padding_bottom": padding_bottom,
+            "final_frame_width": visible_width,
+            "final_frame_height": visible_height,
+            "final_render_image_width": target_width,
+            "final_render_image_height": target_height,
+            "scale": 1.0,
+            "rotation": 0.0,
+            "text_layout": text_layout,
+        }
 
     def _paint_text(self, painter: QPainter, layout: dict, image_w: int, image_h: int) -> None:
         lines = layout.get("lines") or [" "]
@@ -238,6 +262,17 @@ class SVGHighlightRenderer:
             self._logger.info("[SVG_COLOR] ffmpeg_pix_fmt=%s", "overlay-input:rgba")
         except Exception:
             pass
+
+    def _log_layout_debug(self, mode: str, layout: dict) -> None:
+        tag = "SVG_LAYOUT_PREVIEW" if mode == "preview" else "SVG_LAYOUT_EXPORT"
+        self._logger.info("[%s] text=%r", tag, layout.get("text", ""))
+        self._logger.info("[%s] lines=%s", tag, layout.get("text_lines", []))
+        self._logger.info("[%s] final_frame_width=%s", tag, layout.get("final_frame_width"))
+        self._logger.info("[%s] final_frame_height=%s", tag, layout.get("final_frame_height"))
+        self._logger.info("[%s] font_size_effective=%s", tag, layout.get("font_size_effective"))
+        self._logger.info("[%s] render_image_width=%s", tag, layout.get("final_render_image_width"))
+        self._logger.info("[%s] render_image_height=%s", tag, layout.get("final_render_image_height"))
+        self._logger.info("[%s] scale=%s", tag, layout.get("scale", 1.0))
 
     @staticmethod
     def _sample_color(image, target_hex: str) -> tuple[int, int, int] | None:

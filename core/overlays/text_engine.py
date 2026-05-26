@@ -63,6 +63,18 @@ class TextEngine:
         if path is None or not path.exists():
             path = self._new_asset_path()
             if svg_template:
+                svg_layout = getattr(overlay, "svg_layout", None)
+                if not isinstance(svg_layout, dict) or not svg_layout.get("svg_bytes"):
+                    svg_layout = self.svg_renderer.compute_svg_highlight_layout(
+                        svg_template,
+                        overlay.text,
+                        self.layout.denormalize_font_size(font_ratio, canvas_height),
+                        canvas_width,
+                    )
+                    svg_layout["scale"] = float(getattr(overlay, "scale", 1.0) or 1.0)
+                    svg_layout["rotation"] = float(getattr(overlay, "rotation", 0.0) or 0.0)
+                    if hasattr(overlay, "svg_layout"):
+                        overlay.svg_layout = svg_layout
                 image = self.svg_renderer.render_image(
                     svg_template,
                     overlay.text,
@@ -74,6 +86,7 @@ class TextEngine:
                     logical_height=getattr(overlay, "h", 0.0),
                     item_scale=float(getattr(overlay, "scale", 1.0) or 1.0),
                     output_resolution=(canvas_width, canvas_height),
+                    stored_layout=svg_layout,
                 )
                 if not image.save(str(path), "PNG"):
                     raise RuntimeError(f"Unable to write SVG highlight PNG: {path}")

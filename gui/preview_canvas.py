@@ -177,6 +177,7 @@ if QLabel:
                     "motion_strength": layer.get("motion_strength", 1.35),
                     "start": layer.get("start", 0.0),
                     "end": layer.get("end", 3.0),
+                    "svg_layout": layer.get("svg_layout"),
                 }
             self.update()
 
@@ -386,6 +387,17 @@ if QLabel:
                 svg_template = getattr(template_manager, "svg_template_path", lambda _name: None)(str(data["template"]))
                 try:
                     if svg_template:
+                        svg_layout = data.get("svg_layout")
+                        if not isinstance(svg_layout, dict):
+                            svg_layout = self._svg_highlight_renderer.compute_svg_highlight_layout(
+                                svg_template,
+                                str(data["text"]),
+                                self._highlight_font_pixels(float(data["font_size"]), round(canvas.height())),
+                                round(canvas.width()),
+                            )
+                        svg_layout["scale"] = float(data.get("scale", 1.0))
+                        svg_layout["rotation"] = float(data.get("rotation", 0.0))
+                        data["svg_layout"] = svg_layout
                         image = self._svg_highlight_renderer.render_image(
                             svg_template,
                             str(data["text"]),
@@ -398,6 +410,7 @@ if QLabel:
                             item_scale=float(data.get("scale", 1.0)),
                             preview_video_rect=(canvas.left(), canvas.top(), canvas.width(), canvas.height()),
                             output_resolution=(round(canvas.width()), round(canvas.height())),
+                            stored_layout=svg_layout,
                         )
                     else:
                         image = self._typography_renderer.render_image(
