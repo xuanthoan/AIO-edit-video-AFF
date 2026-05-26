@@ -21,6 +21,7 @@ class SVGHighlightRenderer:
     BASE_HEIGHT = 646.0
     TEXT_SIZE_MULTIPLIER = 4.5
     _logger = logging.getLogger(__name__)
+    _last_layout: dict | None = None
 
     def render_image(
         self,
@@ -42,6 +43,8 @@ class SVGHighlightRenderer:
         svg_bytes, output_width, output_height, text_layout, layout_debug = self._build_svg_bytes(
             template_path, text, font_size, canvas_width, logical_width=logical_width, logical_height=logical_height
         )
+        self._last_layout = dict(layout_debug)
+        self._last_layout["lines"] = list(text_layout.get("lines", []))
         is_tag_svg = "blue_tag_template" in template_path or "orange_tag_template" in template_path or "simple_blue_tag_template" in template_path
         if is_tag_svg:
             self._logger.info("[BLUE_TAG_RENDER] mode=%s", mode)
@@ -92,6 +95,9 @@ class SVGHighlightRenderer:
         painter.end()
         self._log_color_debug(mode, image, is_tag_svg=is_tag_svg)
         return image
+
+    def last_layout(self) -> dict | None:
+        return dict(self._last_layout) if self._last_layout else None
 
     def _build_svg_bytes(self, template_path: str, text: str, font_size: float, canvas_width: int, *, logical_width: float | None = None, logical_height: float | None = None):
         source_path = app_root() / template_path

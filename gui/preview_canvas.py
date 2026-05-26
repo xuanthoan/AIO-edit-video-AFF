@@ -410,6 +410,16 @@ if QLabel:
                             preview_video_rect=(canvas.left(), canvas.top(), canvas.width(), canvas.height()),
                             output_resolution=(round(canvas.width()), round(canvas.height())),
                         )
+                        layout = self._svg_highlight_renderer.last_layout() or {}
+                        data["svg_layout"] = layout
+                        self.previewMotionDebug.emit(f"[SVG_LAYOUT_PREVIEW] text={str(data.get('text',''))}")
+                        self.previewMotionDebug.emit(f"[SVG_LAYOUT_PREVIEW] lines={layout.get('lines', [])}")
+                        self.previewMotionDebug.emit(f"[SVG_LAYOUT_PREVIEW] final_frame_width={layout.get('final_frame_width')}")
+                        self.previewMotionDebug.emit(f"[SVG_LAYOUT_PREVIEW] final_frame_height={layout.get('final_frame_height')}")
+                        self.previewMotionDebug.emit(f"[SVG_LAYOUT_PREVIEW] font_size_effective={layout.get('font_size')}")
+                        self.previewMotionDebug.emit(f"[SVG_LAYOUT_PREVIEW] render_image_width={layout.get('rendered_image_width')}")
+                        self.previewMotionDebug.emit(f"[SVG_LAYOUT_PREVIEW] render_image_height={layout.get('rendered_image_height')}")
+                        self.previewMotionDebug.emit(f"[SVG_LAYOUT_PREVIEW] scale={float(data.get('scale', 1.0))}")
                     else:
                         image = self._typography_renderer.render_image(
                             str(data["text"]),

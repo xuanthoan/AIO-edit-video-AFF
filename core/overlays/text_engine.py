@@ -91,6 +91,16 @@ class TextEngine:
                     item_scale=float(getattr(overlay, "scale", 1.0) or 1.0),
                     output_resolution=(canvas_width, canvas_height),
                 )
+                layout = self.svg_renderer.last_layout() or {}
+                if template_name in {"Blue Tag SVG", "Simple Blue Tag SVG", "Orange Tag SVG"}:
+                    print(f"[SVG_LAYOUT_EXPORT] text={overlay.text}")
+                    print(f"[SVG_LAYOUT_EXPORT] lines={layout.get('lines', [])}")
+                    print(f"[SVG_LAYOUT_EXPORT] final_frame_width={layout.get('final_frame_width')}")
+                    print(f"[SVG_LAYOUT_EXPORT] final_frame_height={layout.get('final_frame_height')}")
+                    print(f"[SVG_LAYOUT_EXPORT] font_size_effective={layout.get('font_size')}")
+                    print(f"[SVG_LAYOUT_EXPORT] render_image_width={layout.get('rendered_image_width')}")
+                    print(f"[SVG_LAYOUT_EXPORT] render_image_height={layout.get('rendered_image_height')}")
+                    print(f"[SVG_LAYOUT_EXPORT] scale={float(getattr(overlay, 'scale', 1.0) or 1.0)}")
                 if not image.save(str(path), "PNG"):
                     raise RuntimeError(f"Unable to write SVG highlight PNG: {path}")
             else:
