@@ -39,9 +39,16 @@ class SVGHighlightRenderer:
     ):
         if QImage is None:
             raise RuntimeError("PySide6 is required to render SVG highlight assets.")
-        svg_bytes, output_width, output_height, text_layout = self._build_svg_bytes(
+        svg_bytes, output_width, output_height, text_layout, layout_debug = self._build_svg_bytes(
             template_path, text, font_size, canvas_width
         )
+        self._logger.info("[SVG_LAYOUT] mode=%s text_len=%s", mode, len((text or "")))
+        self._logger.info("[SVG_LAYOUT] final_frame_width=%s", layout_debug["final_frame_width"])
+        self._logger.info("[SVG_LAYOUT] final_frame_height=%s", layout_debug["final_frame_height"])
+        self._logger.info("[SVG_LAYOUT] rendered_image_width=%s", layout_debug["rendered_image_width"])
+        self._logger.info("[SVG_LAYOUT] rendered_image_height=%s", layout_debug["rendered_image_height"])
+        self._logger.info("[SVG_LAYOUT] font_size=%s", layout_debug["font_size"])
+        self._logger.info("[SVG_LAYOUT] scale=%s", item_scale)
         self._logger.info("[SVG_SIZE] mode=%s", mode)
         self._logger.info("[SVG_SIZE] text=%r", text)
         self._logger.info("[SVG_SIZE] font_size=%s", font_size)
@@ -104,10 +111,21 @@ class SVGHighlightRenderer:
 
         original_panel_width = float(navy_panel.get("width", "0"))
         original_panel_height = float(navy_panel.get("height", "0"))
-        desired_inner_width = max(original_panel_width, max_line_width + padding_left + padding_right)
-        desired_inner_height = max(original_panel_height, (line_height * len(lines)) + padding_top + padding_bottom)
-        width_delta = desired_inner_width - original_panel_width
-        height_delta = desired_inner_height - original_panel_height
+        layout = self._compute_layout(
+            original_panel_width=original_panel_width,
+            original_panel_height=original_panel_height,
+            max_line_width=max_line_width,
+            line_height=line_height,
+            line_count=len(lines),
+            padding_left=padding_left,
+            padding_right=padding_right,
+            padding_top=padding_top,
+            padding_bottom=padding_bottom,
+            resolved_font_size=resolved_font_size,
+            canvas_width=canvas_width,
+        )
+        width_delta = layout["width_delta"]
+        height_delta = layout["height_delta"]
 
         for node in (orange_stroke, orange_frame, navy_stroke, navy_panel):
             node.set("width", f"{max(1.0, float(node.get('width', '0')) + width_delta):.3f}")
@@ -146,10 +164,7 @@ class SVGHighlightRenderer:
         first_line_y = panel_y + (panel_h - text_block_h) / 2.0 + line_height * 0.8
         line_y_values = [first_line_y + i * line_height for i in range(len(lines))]
 
-        min_target_width = canvas_width * 1.00
-        preferred_target_width = canvas_width * 1.25
-        max_target_width = canvas_width * 1.375
-        target_width = max(1, int(round(max(min_target_width, min(preferred_target_width, max_target_width)))))
+        target_width = int(layout["rendered_image_width"])
         target_height = max(1, int(round(target_width * (visible_height / max(1.0, visible_width)))))
 
         self._logger.info("[SVG_TEXT] raw input text = %r", raw_text)
@@ -175,7 +190,57 @@ class SVGHighlightRenderer:
             "padding_left": padding_left,
             "view_box": (left_bound, top_bound, visible_width, visible_height),
         }
-        return svg_bytes, target_width, target_height, text_layout
+        layout_debug = {
+            "final_frame_width": visible_width,
+            "final_frame_height": visible_height,
+            "rendered_image_width": target_width,
+            "rendered_image_height": target_height,
+            "font_size": resolved_font_size,
+            "padding": (padding_left, padding_right, padding_top, padding_bottom),
+            "text_width": max_line_width,
+            "text_height": line_height * len(lines),
+            "scale": 1.0,
+        }
+        return svg_bytes, target_width, target_height, text_layout, layout_debug
+
+    @staticmethod
+    def _compute_layout(
+        *,
+        original_panel_width: float,
+        original_panel_height: float,
+        max_line_width: float,
+        line_height: float,
+        line_count: int,
+        padding_left: float,
+        padding_right: float,
+        padding_top: float,
+        padding_bottom: float,
+        resolved_font_size: float,
+        canvas_width: int,
+    ) -> dict[str, float]:
+        desired_inner_width = max(original_panel_width, max_line_width + padding_left + padding_right)
+        desired_inner_height = max(original_panel_height, (line_height * line_count) + padding_top + padding_bottom)
+        width_delta = desired_inner_width - original_panel_width
+        height_delta = desired_inner_height - original_panel_height
+        min_target_width = canvas_width * 1.00
+        preferred_target_width = canvas_width * 1.25
+        max_target_width = canvas_width * 1.375
+        rendered_image_width = max(1.0, round(max(min_target_width, min(preferred_target_width, max_target_width))))
+        return {
+            "text_width": max_line_width,
+            "text_height": line_height * line_count,
+            "final_frame_width": desired_inner_width,
+            "final_frame_height": desired_inner_height,
+            "font_size": resolved_font_size,
+            "padding_left": padding_left,
+            "padding_right": padding_right,
+            "padding_top": padding_top,
+            "padding_bottom": padding_bottom,
+            "scale": 1.0,
+            "width_delta": width_delta,
+            "height_delta": height_delta,
+            "rendered_image_width": rendered_image_width,
+        }
 
     def _paint_text(self, painter: QPainter, layout: dict, image_w: int, image_h: int) -> None:
         lines = layout.get("lines") or [" "]
