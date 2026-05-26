@@ -412,6 +412,7 @@ if QLabel:
                             output_resolution=(round(canvas.width()), round(canvas.height())),
                             stored_layout=svg_layout,
                         )
+                        self._typography_pixmap_cache[(kind, "__last_svg_ok__")] = QPixmap.fromImage(image)
                     else:
                         image = self._typography_renderer.render_image(
                             str(data["text"]),
@@ -421,16 +422,25 @@ if QLabel:
                             round(canvas.height()),
                         )
                 except Exception as exc:
-                    image = self._typography_renderer.render_image(
-                        "SVG ERROR",
-                        template,
-                        float(data["font_size"]),
-                        round(canvas.width()),
-                        round(canvas.height()),
-                    )
-                    self.previewMotionDebug.emit(f"[SVG][ERROR] {exc}")
-                pixmap = QPixmap.fromImage(image)
-                self._typography_pixmap_cache[key] = pixmap
+                    fallback_pixmap = self._typography_pixmap_cache.get((kind, "__last_svg_ok__"))
+                    if fallback_pixmap is not None and not fallback_pixmap.isNull():
+                        pixmap = fallback_pixmap
+                        self._typography_pixmap_cache[key] = pixmap
+                        self.previewMotionDebug.emit(f"[SVG][ERROR][USING_LAST_VALID] {exc}")
+                    else:
+                        image = self._typography_renderer.render_image(
+                            "SVG ERROR",
+                            template,
+                            float(data["font_size"]),
+                            round(canvas.width()),
+                            round(canvas.height()),
+                        )
+                        self.previewMotionDebug.emit(f"[SVG][ERROR] {exc}")
+                        pixmap = QPixmap.fromImage(image)
+                        self._typography_pixmap_cache[key] = pixmap
+                if pixmap is None:
+                    pixmap = QPixmap.fromImage(image)
+                    self._typography_pixmap_cache[key] = pixmap
             data["w"] = pixmap.width()
             data["h"] = pixmap.height()
             transformed, transform = self._preview_transform(data, pixmap, canvas)

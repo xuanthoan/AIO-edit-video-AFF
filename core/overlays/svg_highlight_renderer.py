@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import traceback
 from xml.etree import ElementTree as ET
 
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -38,36 +39,45 @@ class SVGHighlightRenderer:
         output_resolution: tuple[int, int] | None = None,
         stored_layout: dict | None = None,
     ):
-        if QImage is None:
-            raise RuntimeError("PySide6 is required to render SVG highlight assets.")
-        layout = stored_layout or self.compute_svg_highlight_layout(template_path, text, font_size, canvas_width)
-        svg_bytes = layout["svg_bytes"]
-        output_width = int(layout["final_render_image_width"])
-        output_height = int(layout["final_render_image_height"])
-        text_layout = layout["text_layout"]
-        self._logger.info("[SVG_SIZE] mode=%s", mode)
-        self._logger.info("[SVG_SIZE] text=%r", text)
-        self._logger.info("[SVG_SIZE] font_size=%s", font_size)
-        self._logger.info("[SVG_SIZE] logical_width=%s", logical_width if logical_width is not None else output_width)
-        self._logger.info("[SVG_SIZE] logical_height=%s", logical_height if logical_height is not None else output_height)
-        self._logger.info("[SVG_SIZE] item_scale=%s", item_scale)
-        self._logger.info("[SVG_SIZE] preview_video_rect=%s", preview_video_rect)
-        self._logger.info("[SVG_SIZE] output_resolution=%s", output_resolution or (canvas_width, canvas_height))
-        self._logger.info("[SVG_SIZE] final_render_width=%s", output_width)
-        self._logger.info("[SVG_SIZE] final_render_height=%s", output_height)
-        renderer = QSvgRenderer(QByteArray(svg_bytes))
-        if not renderer.isValid():
-            raise ValueError(f"Invalid SVG renderer for template: {template_path}")
-        image = QImage(max(1, int(output_width)), max(1, int(output_height)), QImage.Format_ARGB32)
-        image.fill(Qt.transparent)
-        painter = QPainter(image)
-        painter.save()
-        renderer.render(painter)
-        painter.restore()
-        self._paint_text(painter, text_layout, output_width, output_height)
-        painter.end()
-        self._log_dynamic_layout(mode, layout, item_scale, image)
-        return image
+        try:
+            if QImage is None:
+                raise RuntimeError("PySide6 is required to render SVG highlight assets.")
+            layout = stored_layout or self.compute_svg_highlight_layout(template_path, text, font_size, canvas_width)
+            svg_bytes = layout["svg_bytes"]
+            output_width = int(layout["final_render_image_width"])
+            output_height = int(layout["final_render_image_height"])
+            text_layout = layout["text_layout"]
+            self._logger.info("[SVG_SIZE] mode=%s", mode)
+            self._logger.info("[SVG_SIZE] text=%r", text)
+            self._logger.info("[SVG_SIZE] font_size=%s", font_size)
+            self._logger.info("[SVG_SIZE] logical_width=%s", logical_width if logical_width is not None else output_width)
+            self._logger.info("[SVG_SIZE] logical_height=%s", logical_height if logical_height is not None else output_height)
+            self._logger.info("[SVG_SIZE] item_scale=%s", item_scale)
+            self._logger.info("[SVG_SIZE] preview_video_rect=%s", preview_video_rect)
+            self._logger.info("[SVG_SIZE] output_resolution=%s", output_resolution or (canvas_width, canvas_height))
+            self._logger.info("[SVG_SIZE] final_render_width=%s", output_width)
+            self._logger.info("[SVG_SIZE] final_render_height=%s", output_height)
+            renderer = QSvgRenderer(QByteArray(svg_bytes))
+            if not renderer.isValid():
+                raise ValueError(f"Invalid SVG renderer for template: {template_path}")
+            image = QImage(max(1, int(output_width)), max(1, int(output_height)), QImage.Format_ARGB32)
+            image.fill(Qt.transparent)
+            painter = QPainter(image)
+            painter.save()
+            renderer.render(painter)
+            painter.restore()
+            self._paint_text(painter, text_layout, output_width, output_height)
+            painter.end()
+            self._log_dynamic_layout(mode, layout, item_scale, image)
+            return image
+        except Exception as exc:
+            self._logger.error("[SVG_ERROR] style = %s", (stored_layout or {}).get("style_name", ""))
+            self._logger.error("[SVG_ERROR] template_path = %s", template_path)
+            self._logger.error("[SVG_ERROR] text = %r", text)
+            self._logger.error("[SVG_ERROR] font_size = %s", font_size)
+            self._logger.error("[SVG_ERROR] exception = %s", exc)
+            self._logger.error("[SVG_ERROR] traceback = %s", traceback.format_exc())
+            raise
 
     def compute_svg_highlight_layout(
         self,
