@@ -69,6 +69,11 @@ class TextEngine:
                     self.layout.denormalize_font_size(font_ratio, canvas_height),
                     canvas_width,
                     canvas_height,
+                    mode="export",
+                    logical_width=getattr(overlay, "w", 0.0),
+                    logical_height=getattr(overlay, "h", 0.0),
+                    item_scale=float(getattr(overlay, "scale", 1.0) or 1.0),
+                    output_resolution=(canvas_width, canvas_height),
                 )
                 if not image.save(str(path), "PNG"):
                     raise RuntimeError(f"Unable to write SVG highlight PNG: {path}")
