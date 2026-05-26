@@ -420,6 +420,23 @@ if QLabel:
                 self._typography_pixmap_cache[key] = pixmap
             data["w"] = pixmap.width()
             data["h"] = pixmap.height()
+            if (
+                svg_template
+                and not data.get("_blue_tag_init_done")
+                and str(data.get("template", "")) in {"Blue Tag SVG", "Simple Blue Tag SVG"}
+                and pixmap.width() > 0
+            ):
+                caption_safe_zone_width = self._safe_rect("text").width()
+                initial_sticker_width = caption_safe_zone_width
+                stored_scale = max(0.05, float(initial_sticker_width) / float(pixmap.width()))
+                data["scale"] = stored_scale
+                data["_blue_tag_init_done"] = True
+                self.previewMotionDebug.emit(f"[BLUE_TAG_CREATE] caption_safe_zone_width = {caption_safe_zone_width:.3f}")
+                self.previewMotionDebug.emit(f"[BLUE_TAG_CREATE] initial_sticker_width = {initial_sticker_width:.3f}")
+                self.previewMotionDebug.emit(f"[BLUE_TAG_CREATE] stored_scale = {stored_scale:.6f}")
+                key_name = data.get("key")
+                if key_name:
+                    self.overlayTransformed.emit(str(key_name), stored_scale, float(data.get("rotation", 0.0)))
             transformed, transform = self._preview_transform(data, pixmap, canvas)
             center = QPointF(
                 canvas.left() + float(data["x"]) * canvas.width() + transform.x_offset,

@@ -42,6 +42,15 @@ class SVGHighlightRenderer:
         svg_bytes, output_width, output_height, text_layout, layout_debug = self._build_svg_bytes(
             template_path, text, font_size, canvas_width
         )
+        is_tag_svg = "blue_tag_template" in template_path or "orange_tag_template" in template_path or "simple_blue_tag_template" in template_path
+        if is_tag_svg:
+            self._logger.info("[BLUE_TAG_RENDER] mode=%s", mode)
+            self._logger.info("[BLUE_TAG_RENDER] text_len = %s", len((text or "")))
+            self._logger.info("[BLUE_TAG_RENDER] logical_width = %s", logical_width if logical_width is not None else output_width)
+            self._logger.info("[BLUE_TAG_RENDER] logical_height = %s", logical_height if logical_height is not None else output_height)
+            self._logger.info("[BLUE_TAG_RENDER] stored_scale = %s", item_scale)
+            self._logger.info("[BLUE_TAG_RENDER] final_visual_width = %s", output_width * max(0.0, float(item_scale)))
+            self._logger.info("[BLUE_TAG_RENDER] final_visual_height = %s", output_height * max(0.0, float(item_scale)))
         self._logger.info("[SVG_LAYOUT] mode=%s text_len=%s", mode, len((text or "")))
         self._logger.info("[SVG_LAYOUT] final_frame_width=%s", layout_debug["final_frame_width"])
         self._logger.info("[SVG_LAYOUT] final_frame_height=%s", layout_debug["final_frame_height"])
@@ -81,7 +90,7 @@ class SVGHighlightRenderer:
         painter.restore()
         self._paint_text(painter, text_layout, output_width, output_height)
         painter.end()
-        self._log_color_debug(mode, image)
+        self._log_color_debug(mode, image, is_tag_svg=is_tag_svg)
         return image
 
     def _build_svg_bytes(self, template_path: str, text: str, font_size: float, canvas_width: int):
@@ -299,7 +308,7 @@ class SVGHighlightRenderer:
 
 
 
-    def _log_color_debug(self, mode: str, image) -> None:
+    def _log_color_debug(self, mode: str, image, *, is_tag_svg: bool = False) -> None:
         try:
             fmt = int(image.format())
             premul = "yes" if fmt == int(QImage.Format_ARGB32_Premultiplied) else "no"
@@ -315,6 +324,10 @@ class SVGHighlightRenderer:
             self._logger.info("[SVG_COMPARE] image_format=%s", fmt)
             self._logger.info("[SVG_COMPARE] sample_navy_rgb=%s", navy)
             self._logger.info("[SVG_COMPARE] sample_orange_rgb=%s", orange)
+            if is_tag_svg:
+                self._logger.info("[BLUE_TAG_RENDER] image_format = %s", fmt)
+                self._logger.info("[BLUE_TAG_RENDER] sample_navy_rgb = %s", navy)
+                self._logger.info("[BLUE_TAG_RENDER] sample_orange_rgb = %s", orange)
         except Exception:
             pass
 
