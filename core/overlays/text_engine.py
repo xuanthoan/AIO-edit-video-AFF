@@ -63,6 +63,12 @@ class TextEngine:
         if path is None or not path.exists():
             path = self._new_asset_path()
             if svg_template:
+                if template_name in {"Blue Tag SVG", "Simple Blue Tag SVG", "Orange Tag SVG"}:
+                    print(
+                        f"[BLUE_TAG_STATE] event=export text_len={len(overlay.text or '')} "
+                        f"logical_width={getattr(overlay, 'w', 0.0)} logical_height={getattr(overlay, 'h', 0.0)} "
+                        f"scale={float(getattr(overlay, 'scale', 1.0) or 1.0)} export_rect=({canvas_width},{canvas_height}) render_mode=export"
+                    )
                 image = self.svg_renderer.render_image(
                     svg_template,
                     overlay.text,

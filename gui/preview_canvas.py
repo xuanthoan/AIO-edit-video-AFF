@@ -154,13 +154,19 @@ if QLabel:
             self.update()
 
         def set_highlight_layers(self, layers: list[dict], selected_key: str | None = None) -> None:
-            for key in [key for key in self._overlays if key.startswith("highlight_")]:
-                self._overlays.pop(key, None)
-            self._highlight_visual_handles = {}
-            self._highlight_visual_centers = {}
+            incoming_keys = {str(layer.get("key", f"highlight_{index}")) for index, layer in enumerate(layers, start=1)}
+            existing_keys = [key for key in self._overlays if key.startswith("highlight_")]
+            for key in existing_keys:
+                if key not in incoming_keys:
+                    self._overlays.pop(key, None)
+                    self._highlight_visual_handles.pop(key, None)
+                    self._highlight_visual_centers.pop(key, None)
+                    self.previewMotionDebug.emit(f"[BLUE_TAG_PREVIEW] item removed/recreated/reset key={key}")
             self._selected_highlight_key = selected_key
             for index, layer in enumerate(layers, start=1):
                 key = str(layer.get("key", f"highlight_{index}"))
+                current = self._overlays.get(key, {})
+                blue_locked = bool(current.get("_blue_tag_init_done", False))
                 self._overlays[key] = {
                     "active": layer.get("active", False),
                     "x": layer.get("x", 0.5),
@@ -177,6 +183,7 @@ if QLabel:
                     "motion_strength": layer.get("motion_strength", 1.35),
                     "start": layer.get("start", 0.0),
                     "end": layer.get("end", 3.0),
+                    "_blue_tag_init_done": blue_locked,
                 }
             self.update()
 
@@ -431,6 +438,15 @@ if QLabel:
                 stored_scale = max(0.05, float(initial_sticker_width) / float(pixmap.width()))
                 data["scale"] = stored_scale
                 data["_blue_tag_init_done"] = True
+                self.previewMotionDebug.emit(f"[BLUE_TAG_STATE] event=create")
+                self.previewMotionDebug.emit(f"[BLUE_TAG_STATE] text_len={len(str(data.get('text', '')))}")
+                self.previewMotionDebug.emit(f"[BLUE_TAG_STATE] caption_safe_zone_width={caption_safe_zone_width:.3f}")
+                self.previewMotionDebug.emit(f"[BLUE_TAG_STATE] initial_width_locked={data['_blue_tag_init_done']}")
+                self.previewMotionDebug.emit(f"[BLUE_TAG_STATE] logical_width={data['w']}")
+                self.previewMotionDebug.emit(f"[BLUE_TAG_STATE] logical_height={data['h']}")
+                self.previewMotionDebug.emit(f"[BLUE_TAG_STATE] scale={stored_scale:.6f}")
+                self.previewMotionDebug.emit(f"[BLUE_TAG_STATE] scene_rect_preview=({canvas.left():.2f},{canvas.top():.2f},{canvas.width():.2f},{canvas.height():.2f})")
+                self.previewMotionDebug.emit(f"[BLUE_TAG_STATE] render_mode=preview")
                 self.previewMotionDebug.emit(f"[BLUE_TAG_CREATE] caption_safe_zone_width = {caption_safe_zone_width:.3f}")
                 self.previewMotionDebug.emit(f"[BLUE_TAG_CREATE] initial_sticker_width = {initial_sticker_width:.3f}")
                 self.previewMotionDebug.emit(f"[BLUE_TAG_CREATE] stored_scale = {stored_scale:.6f}")
