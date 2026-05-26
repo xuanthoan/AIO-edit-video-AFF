@@ -49,6 +49,17 @@ class SVGHighlightRenderer:
         self._logger.info("[SVG_LAYOUT] rendered_image_height=%s", layout_debug["rendered_image_height"])
         self._logger.info("[SVG_LAYOUT] font_size=%s", layout_debug["font_size"])
         self._logger.info("[SVG_LAYOUT] scale=%s", item_scale)
+        self._logger.info("[SVG_COMPARE] mode=%s", mode)
+        self._logger.info("[SVG_COMPARE] text_len=%s", len((text or "")))
+        self._logger.info("[SVG_COMPARE] font_size=%s", layout_debug["font_size"])
+        self._logger.info("[SVG_COMPARE] text_width=%s", layout_debug["text_width"])
+        self._logger.info("[SVG_COMPARE] frame_width=%s", layout_debug["final_frame_width"])
+        self._logger.info("[SVG_COMPARE] frame_height=%s", layout_debug["final_frame_height"])
+        self._logger.info("[SVG_COMPARE] render_image_width=%s", layout_debug["rendered_image_width"])
+        self._logger.info("[SVG_COMPARE] render_image_height=%s", layout_debug["rendered_image_height"])
+        self._logger.info("[SVG_COMPARE] item_scale=%s", item_scale)
+        self._logger.info("[SVG_COMPARE] final_visual_width=%s", layout_debug["rendered_image_width"] * max(0.0, float(item_scale)))
+        self._logger.info("[SVG_COMPARE] final_visual_height=%s", layout_debug["rendered_image_height"] * max(0.0, float(item_scale)))
         self._logger.info("[SVG_SIZE] mode=%s", mode)
         self._logger.info("[SVG_SIZE] text=%r", text)
         self._logger.info("[SVG_SIZE] font_size=%s", font_size)
@@ -165,7 +176,7 @@ class SVGHighlightRenderer:
         line_y_values = [first_line_y + i * line_height for i in range(len(lines))]
 
         target_width = int(layout["rendered_image_width"])
-        target_height = max(1, int(round(target_width * (visible_height / max(1.0, visible_width)))))
+        target_height = int(layout["rendered_image_height"])
 
         self._logger.info("[SVG_TEXT] raw input text = %r", raw_text)
         self._logger.info("[SVG_TEXT] lines = %s", lines)
@@ -222,10 +233,9 @@ class SVGHighlightRenderer:
         desired_inner_height = max(original_panel_height, (line_height * line_count) + padding_top + padding_bottom)
         width_delta = desired_inner_width - original_panel_width
         height_delta = desired_inner_height - original_panel_height
-        min_target_width = canvas_width * 1.00
-        preferred_target_width = canvas_width * 1.25
-        max_target_width = canvas_width * 1.375
-        rendered_image_width = max(1.0, round(max(min_target_width, min(preferred_target_width, max_target_width))))
+        # Render with the computed frame geometry directly so preview/export don't diverge on long text.
+        rendered_image_width = max(1.0, round(desired_inner_width))
+        rendered_image_height = max(1.0, round(desired_inner_height))
         return {
             "text_width": max_line_width,
             "text_height": line_height * line_count,
@@ -240,6 +250,7 @@ class SVGHighlightRenderer:
             "width_delta": width_delta,
             "height_delta": height_delta,
             "rendered_image_width": rendered_image_width,
+            "rendered_image_height": rendered_image_height,
         }
 
     def _paint_text(self, painter: QPainter, layout: dict, image_w: int, image_h: int) -> None:
@@ -301,6 +312,9 @@ class SVGHighlightRenderer:
             self._logger.info("[SVG_COLOR] sample_orange_rgb=%s", orange)
             self._logger.info("[SVG_COLOR] output_overlay_format=PNG_RGBA")
             self._logger.info("[SVG_COLOR] ffmpeg_pix_fmt=%s", "overlay-input:rgba")
+            self._logger.info("[SVG_COMPARE] image_format=%s", fmt)
+            self._logger.info("[SVG_COMPARE] sample_navy_rgb=%s", navy)
+            self._logger.info("[SVG_COMPARE] sample_orange_rgb=%s", orange)
         except Exception:
             pass
 
