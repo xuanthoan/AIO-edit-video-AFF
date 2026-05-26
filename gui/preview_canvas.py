@@ -5,6 +5,7 @@ import math
 from pathlib import Path
 from types import SimpleNamespace
 
+from core.normalized_layout import NormalizedLayoutEngine
 from core.overlays.highlight_library import HighlightStyleManager
 from core.overlays.template_manager import TemplateManager
 from core.overlays.svg_highlight_renderer import SVGHighlightRenderer
@@ -391,6 +392,12 @@ if QLabel:
                             self._highlight_font_pixels(float(data["font_size"]), round(canvas.height())),
                             round(canvas.width()),
                             round(canvas.height()),
+                            mode="preview",
+                            logical_width=float(data.get("w", 0.0) or 0.0),
+                            logical_height=float(data.get("h", 0.0) or 0.0),
+                            item_scale=float(data.get("scale", 1.0)),
+                            preview_video_rect=(canvas.left(), canvas.top(), canvas.width(), canvas.height()),
+                            output_resolution=(round(canvas.width()), round(canvas.height())),
                         )
                     else:
                         image = self._typography_renderer.render_image(
@@ -469,9 +476,9 @@ if QLabel:
 
         @staticmethod
         def _highlight_font_pixels(font_ratio: float, canvas_height: int) -> int:
-            if font_ratio <= 1.0:
-                return max(8, round(font_ratio * canvas_height))
-            return max(8, round(font_ratio))
+            layout = NormalizedLayoutEngine()
+            normalized = layout.normalize_font_size(font_ratio)
+            return max(8, layout.denormalize_font_size(normalized, canvas_height))
 
 
         def _selected_handle_points(self) -> dict[str, QPointF]:

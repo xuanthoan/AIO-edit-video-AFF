@@ -11,7 +11,7 @@ HIGHLIGHT_STYLE_NAMES = [
     "TikTok Shop", "Modern Minimal", "Bubble Cute", "Strong Black Yellow", "Hot Deal Red", "Luxury Gold",
     "Clean White", "Black Friday", "Summer Sale", "Mega Discount", "Viral Trend", "Elegant Beauty",
     "Cosmetic Pink", "Kitchen Home", "Food Delivery", "Gaming Neon", "Fashion Streetwear", "Minimal Premium",
-    "Simple Blue Tag SVG", "Orange Tag SVG", "Random Style",
+    "Blue Tag SVG", "Orange Tag SVG", "Random Style",
 ]
 
 HIGHLIGHT_ANIMATIONS = [
@@ -47,7 +47,8 @@ SALES_WORDING_LIBRARY = {
 
 class HighlightStyleManager:
     RANDOM_STYLE_NAME = "Random Style"
-    SVG_STYLE_NAME = "Simple Blue Tag SVG"
+    SVG_STYLE_NAME = "Blue Tag SVG"
+    LEGACY_SVG_STYLE_NAME = "Simple Blue Tag SVG"
     SVG_TEMPLATE_PATH = "assets/vector_highlight_templates/simple_blue_tag_template.svg"
     ORANGE_SVG_STYLE_NAME = "Orange Tag SVG"
     ORANGE_SVG_TEMPLATE_PATH = "assets/vector_highlight_templates/orange_tag_template.svg"
@@ -97,7 +98,7 @@ class HighlightStyleManager:
 
     @classmethod
     def svg_template_path(cls, name: str) -> str | None:
-        if name == cls.SVG_STYLE_NAME:
+        if name in (cls.SVG_STYLE_NAME, cls.LEGACY_SVG_STYLE_NAME):
             return cls.SVG_TEMPLATE_PATH
         if name == cls.ORANGE_SVG_STYLE_NAME:
             return cls.ORANGE_SVG_TEMPLATE_PATH

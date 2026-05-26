@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" id="orange_tag_template" width="1458.610" height="1072.570" viewBox="136.390 174.310 1458.610 1072.570" fill="none">
+  <g id="sticker_root">
+    <rect id="orange_stroke" x="136.39" y="174.31" width="1430.710" height="1044.250" fill="#FFFFFF" />
+    <rect id="orange_frame" x="146.74" y="184.44" width="1410.000" height="1024.000" fill="#123368" />
+    <rect id="navy_stroke" x="164.29" y="202.63" width="1430.710" height="1044.250" fill="#FFFFFF" />
+    <rect id="navy_panel" x="174.64" y="212.76" width="1410.000" height="1024.000" fill="#EC4C2C" />
+    <text id="dynamic_text" x="237.75" y="337" fill="#FFFFFF" font-family="Arial, Montserrat, sans-serif" font-size="96" font-weight="400" dominant-baseline="middle" />
+  </g>
+</svg>

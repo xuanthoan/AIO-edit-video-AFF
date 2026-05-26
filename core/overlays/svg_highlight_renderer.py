@@ -29,16 +29,33 @@ class SVGHighlightRenderer:
         font_size: float,
         canvas_width: int,
         canvas_height: int,
+        *,
+        mode: str = "export",
+        logical_width: float | None = None,
+        logical_height: float | None = None,
+        item_scale: float = 1.0,
+        preview_video_rect: tuple[float, float, float, float] | None = None,
+        output_resolution: tuple[int, int] | None = None,
     ):
         if QImage is None:
             raise RuntimeError("PySide6 is required to render SVG highlight assets.")
         svg_bytes, output_width, output_height, text_layout = self._build_svg_bytes(
             template_path, text, font_size, canvas_width
         )
+        self._logger.info("[SVG_SIZE] mode=%s", mode)
+        self._logger.info("[SVG_SIZE] text=%r", text)
+        self._logger.info("[SVG_SIZE] font_size=%s", font_size)
+        self._logger.info("[SVG_SIZE] logical_width=%s", logical_width if logical_width is not None else output_width)
+        self._logger.info("[SVG_SIZE] logical_height=%s", logical_height if logical_height is not None else output_height)
+        self._logger.info("[SVG_SIZE] item_scale=%s", item_scale)
+        self._logger.info("[SVG_SIZE] preview_video_rect=%s", preview_video_rect)
+        self._logger.info("[SVG_SIZE] output_resolution=%s", output_resolution or (canvas_width, canvas_height))
+        self._logger.info("[SVG_SIZE] final_render_width=%s", output_width)
+        self._logger.info("[SVG_SIZE] final_render_height=%s", output_height)
         renderer = QSvgRenderer(QByteArray(svg_bytes))
         if not renderer.isValid():
             raise ValueError(f"Invalid SVG renderer for template: {template_path}")
-        image = QImage(max(1, int(output_width)), max(1, int(output_height)), QImage.Format_ARGB32_Premultiplied)
+        image = QImage(max(1, int(output_width)), max(1, int(output_height)), QImage.Format_ARGB32)
         image.fill(Qt.transparent)
         painter = QPainter(image)
         painter.save()
@@ -46,6 +63,7 @@ class SVGHighlightRenderer:
         painter.restore()
         self._paint_text(painter, text_layout, output_width, output_height)
         painter.end()
+        self._log_color_debug(mode, image)
         return image
 
     def _build_svg_bytes(self, template_path: str, text: str, font_size: float, canvas_width: int):
@@ -203,6 +221,43 @@ class SVGHighlightRenderer:
             fallback_text = raw_text if raw_text.strip() else " "
             painter.drawText(text_x_px, baseline_y, fallback_text)
 
+
+
+    def _log_color_debug(self, mode: str, image) -> None:
+        try:
+            fmt = int(image.format())
+            premul = "yes" if fmt == int(QImage.Format_ARGB32_Premultiplied) else "no"
+            navy = self._sample_color(image, "#123368")
+            orange = self._sample_color(image, "#EC4C2C")
+            self._logger.info("[SVG_COLOR] mode=%s", mode)
+            self._logger.info("[SVG_COLOR] qimage_format=%s", fmt)
+            self._logger.info("[SVG_COLOR] premultiplied_alpha=%s", premul)
+            self._logger.info("[SVG_COLOR] sample_navy_rgb=%s", navy)
+            self._logger.info("[SVG_COLOR] sample_orange_rgb=%s", orange)
+            self._logger.info("[SVG_COLOR] output_overlay_format=PNG_RGBA")
+            self._logger.info("[SVG_COLOR] ffmpeg_pix_fmt=%s", "overlay-input:rgba")
+        except Exception:
+            pass
+
+    @staticmethod
+    def _sample_color(image, target_hex: str) -> tuple[int, int, int] | None:
+        if QImage is None or QColor is None:
+            return None
+        target = QColor(target_hex)
+        best = None
+        best_dist = 10**9
+        step_x = max(1, image.width() // 64)
+        step_y = max(1, image.height() // 64)
+        for y in range(0, image.height(), step_y):
+            for x in range(0, image.width(), step_x):
+                c = image.pixelColor(x, y)
+                if c.alpha() < 16:
+                    continue
+                d = abs(c.red()-target.red()) + abs(c.green()-target.green()) + abs(c.blue()-target.blue())
+                if d < best_dist:
+                    best_dist = d
+                    best = (c.red(), c.green(), c.blue())
+        return best
     @staticmethod
     def _dump_debug_svg(svg_bytes: bytes) -> None:
         try:
