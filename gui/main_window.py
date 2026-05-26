@@ -610,8 +610,16 @@ if QMainWindow:
 
         def update_highlight_preview(self) -> None:
             highlight = self._selected_highlight()
+            previous_style = highlight.style
             highlight.text = self.workflow.highlight_text.toPlainText().strip()
             highlight.style = self.workflow.highlight_style.currentText()
+            tag_styles = {"Blue Tag SVG", "Simple Blue Tag SVG", "Orange Tag SVG"}
+            if highlight.style in tag_styles and (not highlight.initial_width_locked or previous_style not in tag_styles):
+                sx, sy, sw, sh = self.preview.safe_rect()
+                canvas_w = max(1.0, float(self.preview._canvas_rect().width()))
+                highlight.width_norm = max(0.0, min(1.0, float(sw) / canvas_w))
+                highlight.initial_width_locked = True
+                print(f"[BLUE_TAG_STATE] event=apply text_len={len(highlight.text)} caption_safe_zone_width={sw} initial_width_locked={highlight.initial_width_locked} logical_width={highlight.logical_width} logical_height={highlight.logical_height} scale={highlight.scale} scene_rect_preview=({sx},{sy},{sw},{sh}) render_mode=preview")
             highlight.set_font_size(self.workflow.highlight_font_size.value())
             highlight.set_animation_label(self.workflow.highlight_animation.currentText())
             highlight.motion_speed = 1.35
@@ -638,6 +646,10 @@ if QMainWindow:
                     "end": overlay.end_time,
                     "scale": getattr(overlay, "scale", 1.0),
                     "rotation": getattr(overlay, "rotation", 0.0),
+                    "width_norm": getattr(overlay, "width_norm", 0.0),
+                    "logical_width": getattr(overlay, "logical_width", 0.0),
+                    "logical_height": getattr(overlay, "logical_height", 0.0),
+                    "initial_width_locked": getattr(overlay, "initial_width_locked", False),
                 })
             self.preview.set_highlight_layers(layers, selected_key=self._highlight_key(self.selected_highlight_index))
             self.refresh_highlight_list()

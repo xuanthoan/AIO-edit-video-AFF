@@ -178,6 +178,10 @@ if QLabel:
                     "font_size": layer.get("font_size", 118 / 1920),
                     "scale": layer.get("scale", 1.0),
                     "rotation": layer.get("rotation", 0.0),
+                    "width_norm": layer.get("width_norm", 0.0),
+                    "logical_width": layer.get("logical_width", 0.0),
+                    "logical_height": layer.get("logical_height", 0.0),
+                    "initial_width_locked": layer.get("initial_width_locked", False),
                     "motion": layer.get("motion", "Pop"),
                     "motion_speed": layer.get("motion_speed", 1.25),
                     "motion_strength": layer.get("motion_strength", 1.35),
@@ -427,6 +431,9 @@ if QLabel:
                 self._typography_pixmap_cache[key] = pixmap
             data["w"] = pixmap.width()
             data["h"] = pixmap.height()
+            if svg_template:
+                data["logical_width"] = float(pixmap.width())
+                data["logical_height"] = float(pixmap.height())
             if (
                 svg_template
                 and not data.get("_blue_tag_init_done")
@@ -434,6 +441,8 @@ if QLabel:
                 and pixmap.width() > 0
             ):
                 caption_safe_zone_width = self._safe_rect("text").width()
+                if float(data.get("width_norm", 0.0)) > 0.0:
+                    caption_safe_zone_width = float(data.get("width_norm", 0.0)) * max(1.0, canvas.width())
                 initial_sticker_width = caption_safe_zone_width
                 stored_scale = max(0.05, float(initial_sticker_width) / float(pixmap.width()))
                 data["scale"] = stored_scale

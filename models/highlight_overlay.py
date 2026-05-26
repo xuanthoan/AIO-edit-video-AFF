@@ -19,6 +19,10 @@ class HighlightOverlay(OverlayBase):
     font_ratio: float = DEFAULT_HIGHLIGHT_FONT_RATIO
     scale: float = 1.0
     rotation: float = 0.0
+    width_norm: float = 0.0
+    logical_width: float = 0.0
+    logical_height: float = 0.0
+    initial_width_locked: bool = False
 
     def effective_font_ratio(self) -> float:
         source = self.font_size if self.font_size != 118 and self.font_ratio == DEFAULT_HIGHLIGHT_FONT_RATIO else (self.font_ratio or self.font_size)

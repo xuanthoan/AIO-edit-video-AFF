@@ -40,7 +40,7 @@ class SVGHighlightRenderer:
         if QImage is None:
             raise RuntimeError("PySide6 is required to render SVG highlight assets.")
         svg_bytes, output_width, output_height, text_layout, layout_debug = self._build_svg_bytes(
-            template_path, text, font_size, canvas_width
+            template_path, text, font_size, canvas_width, logical_width=logical_width, logical_height=logical_height
         )
         is_tag_svg = "blue_tag_template" in template_path or "orange_tag_template" in template_path or "simple_blue_tag_template" in template_path
         if is_tag_svg:
@@ -93,7 +93,7 @@ class SVGHighlightRenderer:
         self._log_color_debug(mode, image, is_tag_svg=is_tag_svg)
         return image
 
-    def _build_svg_bytes(self, template_path: str, text: str, font_size: float, canvas_width: int):
+    def _build_svg_bytes(self, template_path: str, text: str, font_size: float, canvas_width: int, *, logical_width: float | None = None, logical_height: float | None = None):
         source_path = app_root() / template_path
         self._logger.info("[SVG] loading template path=%s", source_path.resolve())
         if not source_path.exists():
@@ -143,6 +143,8 @@ class SVGHighlightRenderer:
             padding_bottom=padding_bottom,
             resolved_font_size=resolved_font_size,
             canvas_width=canvas_width,
+            min_logical_width=max(0.0, float(logical_width or 0.0)),
+            min_logical_height=max(0.0, float(logical_height or 0.0)),
         )
         width_delta = layout["width_delta"]
         height_delta = layout["height_delta"]
@@ -237,9 +239,11 @@ class SVGHighlightRenderer:
         padding_bottom: float,
         resolved_font_size: float,
         canvas_width: int,
+        min_logical_width: float = 0.0,
+        min_logical_height: float = 0.0,
     ) -> dict[str, float]:
-        desired_inner_width = max(original_panel_width, max_line_width + padding_left + padding_right)
-        desired_inner_height = max(original_panel_height, (line_height * line_count) + padding_top + padding_bottom)
+        desired_inner_width = max(original_panel_width, max_line_width + padding_left + padding_right, min_logical_width)
+        desired_inner_height = max(original_panel_height, (line_height * line_count) + padding_top + padding_bottom, min_logical_height)
         width_delta = desired_inner_width - original_panel_width
         height_delta = desired_inner_height - original_panel_height
         # Render with the computed frame geometry directly so preview/export don't diverge on long text.

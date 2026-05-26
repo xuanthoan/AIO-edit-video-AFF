@@ -63,12 +63,22 @@ class TextEngine:
         if path is None or not path.exists():
             path = self._new_asset_path()
             if svg_template:
+                width_norm = float(getattr(overlay, "width_norm", 0.0) or 0.0)
+                logical_w = float(getattr(overlay, "logical_width", 0.0) or 0.0)
+                if width_norm > 0.0:
+                    logical_w = width_norm * float(canvas_width)
+                logical_h = float(getattr(overlay, "logical_height", 0.0) or 0.0)
                 if template_name in {"Blue Tag SVG", "Simple Blue Tag SVG", "Orange Tag SVG"}:
                     print(
                         f"[BLUE_TAG_STATE] event=export text_len={len(overlay.text or '')} "
-                        f"logical_width={getattr(overlay, 'w', 0.0)} logical_height={getattr(overlay, 'h', 0.0)} "
+                        f"logical_width={logical_w} logical_height={logical_h} "
                         f"scale={float(getattr(overlay, 'scale', 1.0) or 1.0)} export_rect=({canvas_width},{canvas_height}) render_mode=export"
                     )
+                    preview_width_norm = width_norm
+                    export_width_norm = logical_w / float(max(1, canvas_width))
+                    print(f"[BLUE_TAG_COMPARE] preview_width_norm = {preview_width_norm}")
+                    print(f"[BLUE_TAG_COMPARE] export_width_norm = {export_width_norm}")
+                    print(f"[BLUE_TAG_COMPARE] delta = {abs(preview_width_norm - export_width_norm)}")
                 image = self.svg_renderer.render_image(
                     svg_template,
                     overlay.text,
@@ -76,8 +86,8 @@ class TextEngine:
                     canvas_width,
                     canvas_height,
                     mode="export",
-                    logical_width=getattr(overlay, "w", 0.0),
-                    logical_height=getattr(overlay, "h", 0.0),
+                    logical_width=logical_w,
+                    logical_height=logical_h,
                     item_scale=float(getattr(overlay, "scale", 1.0) or 1.0),
                     output_resolution=(canvas_width, canvas_height),
                 )
