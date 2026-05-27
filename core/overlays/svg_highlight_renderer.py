@@ -82,7 +82,9 @@ class SVGHighlightRenderer:
         vb_width = float(view_box[2])
         vb_height = float(view_box[3])
 
-        text_node = self._find_required(root, "dynamic_text")
+        text_node = self._find_first(root, ("dynamic_text", "text_layer"), tag="text")
+        if text_node is None:
+            raise ValueError("Template missing text layer for highlight alignment.")
         raw_text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
         lines = raw_text.split("\n")
         if not lines or all(not line.strip() for line in lines):
@@ -92,41 +94,32 @@ class SVGHighlightRenderer:
         effective_font_size = resolved_font_size * self.TEXT_SIZE_MULTIPLIER
         max_line_width, line_height = self._measure_text_block(lines, effective_font_size)
 
-        orange_stroke = self._find_required(root, "orange_stroke")
-        orange_frame = self._find_required(root, "orange_frame")
-        navy_stroke = self._find_required(root, "navy_stroke")
-        navy_panel = self._find_required(root, "navy_panel")
+        panel_node = self._find_first(root, ("text_safe_area", "navy_panel"), shape_only=True)
+        if panel_node is None:
+            panel_node = self._find_largest_rect(root)
+        if panel_node is None:
+            raise ValueError("Template missing a rectangle/text safe area for highlight layout.")
 
         padding_left = 60.0
         padding_right = 60.0
         padding_top = 40.0
         padding_bottom = 40.0
 
-        original_panel_width = float(navy_panel.get("width", "0"))
-        original_panel_height = float(navy_panel.get("height", "0"))
+        original_panel_width, original_panel_height, panel_x, panel_y = self._shape_rect(panel_node)
         desired_inner_width = max(original_panel_width, max_line_width + padding_left + padding_right)
         desired_inner_height = max(original_panel_height, (line_height * len(lines)) + padding_top + padding_bottom)
         width_delta = desired_inner_width - original_panel_width
         height_delta = desired_inner_height - original_panel_height
 
-        for node in (orange_stroke, orange_frame, navy_stroke, navy_panel):
-            node.set("width", f"{max(1.0, float(node.get('width', '0')) + width_delta):.3f}")
-            node.set("height", f"{max(1.0, float(node.get('height', '0')) + height_delta):.3f}")
+        sticker_nodes = self._collect_sticker_nodes(root)
+        for node in sticker_nodes:
+            width, height, _x, _y = self._shape_rect(node)
+            if width > 0:
+                node.set("width", f"{max(1.0, width + width_delta):.3f}")
+            if height > 0:
+                node.set("height", f"{max(1.0, height + height_delta):.3f}")
 
-        left_bound = min(float(orange_stroke.get("x", "0")), float(orange_frame.get("x", "0")), float(navy_stroke.get("x", "0")), float(navy_panel.get("x", "0")))
-        right_bound = max(
-            float(orange_stroke.get("x", "0")) + float(orange_stroke.get("width", "0")),
-            float(orange_frame.get("x", "0")) + float(orange_frame.get("width", "0")),
-            float(navy_stroke.get("x", "0")) + float(navy_stroke.get("width", "0")),
-            float(navy_panel.get("x", "0")) + float(navy_panel.get("width", "0")),
-        )
-        top_bound = min(float(orange_stroke.get("y", "0")), float(orange_frame.get("y", "0")), float(navy_stroke.get("y", "0")), float(navy_panel.get("y", "0")))
-        bottom_bound = max(
-            float(orange_stroke.get("y", "0")) + float(orange_stroke.get("height", "0")),
-            float(orange_frame.get("y", "0")) + float(orange_frame.get("height", "0")),
-            float(navy_stroke.get("y", "0")) + float(navy_stroke.get("height", "0")),
-            float(navy_panel.get("y", "0")) + float(navy_panel.get("height", "0")),
-        )
+        left_bound, top_bound, right_bound, bottom_bound = self._compute_bounds(sticker_nodes)
 
         visible_width = right_bound - left_bound
         visible_height = bottom_bound - top_bound
@@ -139,9 +132,8 @@ class SVGHighlightRenderer:
         for child in list(text_node):
             text_node.remove(child)
 
-        text_x = float(navy_panel.get("x", "0")) + padding_left
-        panel_y = float(navy_panel.get("y", "0"))
-        panel_h = float(navy_panel.get("height", "0"))
+        _panel_w, panel_h, panel_x, panel_y = self._shape_rect(panel_node)
+        text_x = panel_x + padding_left
         text_block_h = line_height * len(lines)
         first_line_y = panel_y + (panel_h - text_block_h) / 2.0 + line_height * 0.8
         line_y_values = [first_line_y + i * line_height for i in range(len(lines))]
@@ -171,7 +163,7 @@ class SVGHighlightRenderer:
             "font_size": effective_font_size,
             "text_x": text_x,
             "line_y_values": line_y_values,
-            "panel_rect": (float(navy_panel.get("x", "0")), float(navy_panel.get("y", "0")), float(navy_panel.get("width", "0")), float(navy_panel.get("height", "0"))),
+            "panel_rect": (panel_x, panel_y, desired_inner_width, desired_inner_height),
             "padding_left": padding_left,
             "view_box": (left_bound, top_bound, visible_width, visible_height),
         }
@@ -273,6 +265,63 @@ class SVGHighlightRenderer:
         if node is None:
             raise ValueError(f"Template missing id='{element_id}'.")
         return node
+
+
+    @staticmethod
+    def _normalize_id(value: str) -> str:
+        return value.lower().replace("_x5f_", "_").replace("-", "_")
+
+    def _find_first(self, root: ET.Element, id_hints: tuple[str, ...], *, tag: str | None = None, shape_only: bool = False):
+        hints = tuple(self._normalize_id(h) for h in id_hints)
+        for node in root.iter():
+            node_id = self._normalize_id(node.get("id", ""))
+            if not any(h in node_id for h in hints):
+                continue
+            if tag and node.tag.split('}')[-1] != tag:
+                continue
+            if shape_only and node.tag.split('}')[-1] not in {"rect", "path"}:
+                continue
+            return node
+        return None
+
+    def _collect_sticker_nodes(self, root: ET.Element) -> list[ET.Element]:
+        nodes = [n for n in root.iter() if n.tag.split('}')[-1] in {"rect", "path", "polygon", "ellipse", "circle"}]
+        return nodes or [root]
+
+    def _shape_rect(self, node: ET.Element) -> tuple[float, float, float, float]:
+        tag = node.tag.split('}')[-1]
+        if tag == "rect":
+            return float(node.get("width", "0")), float(node.get("height", "0")), float(node.get("x", "0")), float(node.get("y", "0"))
+        bbox = self._path_bbox(node.get("d", ""))
+        if bbox:
+            return bbox[2]-bbox[0], bbox[3]-bbox[1], bbox[0], bbox[1]
+        return 0.0, 0.0, 0.0, 0.0
+
+    def _find_largest_rect(self, root: ET.Element):
+        rects = [n for n in root.iter() if n.tag.split('}')[-1] == "rect"]
+        if not rects:
+            return None
+        return max(rects, key=lambda n: float(n.get("width", "0"))*float(n.get("height", "0")))
+
+    def _compute_bounds(self, nodes: list[ET.Element]) -> tuple[float, float, float, float]:
+        bounds=[]
+        for n in nodes:
+            w,h,x,y = self._shape_rect(n)
+            if w>0 and h>0:
+                bounds.append((x,y,x+w,y+h))
+        if not bounds:
+            return 0.0,0.0,self.BASE_WIDTH,self.BASE_HEIGHT
+        return min(b[0] for b in bounds), min(b[1] for b in bounds), max(b[2] for b in bounds), max(b[3] for b in bounds)
+
+    @staticmethod
+    def _path_bbox(d: str):
+        import re
+        nums = [float(v) for v in re.findall(r"-?\d+(?:\.\d+)?", d or "")]
+        if len(nums) < 4:
+            return None
+        xs = nums[0::2]
+        ys = nums[1::2]
+        return min(xs), min(ys), max(xs), max(ys)
 
     @staticmethod
     def _resolve_font_size(text_node: ET.Element, font_size: float, base_height: float) -> float:

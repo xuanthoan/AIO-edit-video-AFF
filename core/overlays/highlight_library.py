@@ -2,17 +2,30 @@
 from __future__ import annotations
 
 import random
+from pathlib import Path
 
 from core.overlays.template_manager import TextTemplate
+from utils.ffmpeg_helper import app_root
 
 
-HIGHLIGHT_STYLE_NAMES = [
-    "TikTok Bold", "Flash Sale", "Premium Luxury", "Neon Glow", "Urgent CTA", "Shopee Style",
-    "TikTok Shop", "Modern Minimal", "Bubble Cute", "Strong Black Yellow", "Hot Deal Red", "Luxury Gold",
-    "Clean White", "Black Friday", "Summer Sale", "Mega Discount", "Viral Trend", "Elegant Beauty",
-    "Cosmetic Pink", "Kitchen Home", "Food Delivery", "Gaming Neon", "Fashion Streetwear", "Minimal Premium",
-    "Blue Tag SVG", "Orange Tag SVG", "Random Style",
-]
+
+
+
+def _title_from_svg_file(path: Path) -> str:
+    stem = path.stem.replace("-", " ").replace("_", " ").strip()
+    return " ".join(part.capitalize() for part in stem.split()) or path.stem
+
+
+def _discover_svg_highlight_styles() -> dict[str, str]:
+    template_root = app_root() / "assets" / "vector_highlight_templates"
+    if not template_root.exists():
+        return {}
+    styles: dict[str, str] = {}
+    for svg_path in sorted(template_root.glob("*.svg")):
+        style_name = _title_from_svg_file(svg_path)
+        styles[style_name] = str(svg_path.relative_to(app_root())).replace("\\", "/")
+    return styles
+
 
 HIGHLIGHT_ANIMATIONS = [
     "None", "Pop", "Bounce", "Pulse", "Wiggle", "Zoom In", "Zoom Out", "Float", "Slide Up", "Slide Down",
@@ -52,6 +65,11 @@ class HighlightStyleManager:
     SVG_TEMPLATE_PATH = "assets/vector_highlight_templates/simple_blue_tag_template.svg"
     ORANGE_SVG_STYLE_NAME = "Orange Tag SVG"
     ORANGE_SVG_TEMPLATE_PATH = "assets/vector_highlight_templates/orange_tag_template.svg"
+    _SVG_STYLE_MAP = {
+        SVG_STYLE_NAME: SVG_TEMPLATE_PATH,
+        LEGACY_SVG_STYLE_NAME: SVG_TEMPLATE_PATH,
+        ORANGE_SVG_STYLE_NAME: ORANGE_SVG_TEMPLATE_PATH,
+    }
     BUILT_INS = [
         TextTemplate("TikTok Bold", "#FFFFFF", "#111111", "#FF2D55", "black@0.45", ("#FFFFFF", "#111111")),
         TextTemplate("Flash Sale", "#FFFFFF", "#FF2D2D", "#FFD400", "#FFD400@0.55", ("#FFFFFF", "#FF2D2D")),
@@ -79,8 +97,14 @@ class HighlightStyleManager:
         TextTemplate("Minimal Premium", "#E8D8B0", "#232323", "#E8D8B0", "black@0.28", ("#E8D8B0", "#232323")),
     ]
 
+    @classmethod
+    def svg_styles(cls) -> dict[str, str]:
+        styles = dict(cls._SVG_STYLE_MAP)
+        styles.update(_discover_svg_highlight_styles())
+        return styles
+
     def names(self) -> list[str]:
-        return [template.name for template in self.BUILT_INS] + [self.RANDOM_STYLE_NAME]
+        return [template.name for template in self.BUILT_INS] + list(self.svg_styles().keys()) + [self.RANDOM_STYLE_NAME]
 
     def get(self, name: str) -> TextTemplate:
         if name == self.RANDOM_STYLE_NAME:
@@ -98,8 +122,7 @@ class HighlightStyleManager:
 
     @classmethod
     def svg_template_path(cls, name: str) -> str | None:
-        if name in (cls.SVG_STYLE_NAME, cls.LEGACY_SVG_STYLE_NAME):
-            return cls.SVG_TEMPLATE_PATH
-        if name == cls.ORANGE_SVG_STYLE_NAME:
-            return cls.ORANGE_SVG_TEMPLATE_PATH
-        return None
+        return cls.svg_styles().get(name)
+
+
+HIGHLIGHT_STYLE_NAMES = HighlightStyleManager().names()
