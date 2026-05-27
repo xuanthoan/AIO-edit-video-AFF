@@ -72,7 +72,11 @@ class SVGHighlightRenderer:
         if not source_path.exists():
             raise FileNotFoundError(f"SVG template not found: {source_path}")
         raw = source_path.read_text(encoding="utf-8")
-        root = ET.fromstring(raw)
+        try:
+            root = ET.fromstring(raw)
+        except ET.ParseError as exc:
+            self._logger.exception("[SVG] parse error path=%s err=%s", source_path, exc)
+            raise ValueError(f"SVG parse error: {source_path}") from exc
 
         view_box = root.attrib.get("viewBox", "").strip().replace(",", " ").split()
         if len(view_box) != 4:
@@ -82,7 +86,9 @@ class SVGHighlightRenderer:
         vb_width = float(view_box[2])
         vb_height = float(view_box[3])
 
-        text_node = self._find_required(root, "dynamic_text")
+        text_node = self._find_first(root, ["dynamic_text", "text_layer"])
+        if text_node is None:
+            raise ValueError("Template missing text node id='dynamic_text' or id='text_layer'.")
         raw_text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
         lines = raw_text.split("\n")
         if not lines or all(not line.strip() for line in lines):
@@ -92,41 +98,53 @@ class SVGHighlightRenderer:
         effective_font_size = resolved_font_size * self.TEXT_SIZE_MULTIPLIER
         max_line_width, line_height = self._measure_text_block(lines, effective_font_size)
 
-        orange_stroke = self._find_required(root, "orange_stroke")
-        orange_frame = self._find_required(root, "orange_frame")
-        navy_stroke = self._find_required(root, "navy_stroke")
-        navy_panel = self._find_required(root, "navy_panel")
+        orange_stroke = self._find_first(root, ["orange_stroke"])
+        orange_frame = self._find_first(root, ["orange_frame"])
+        navy_stroke = self._find_first(root, ["navy_stroke"])
+        navy_panel = self._find_first(root, ["navy_panel", "sticker_group"])
+        if navy_panel is None:
+            raise ValueError("Template missing panel node id='navy_panel' or id='sticker_group'.")
 
         padding_left = 60.0
         padding_right = 60.0
         padding_top = 40.0
         padding_bottom = 40.0
 
-        original_panel_width = float(navy_panel.get("width", "0"))
-        original_panel_height = float(navy_panel.get("height", "0"))
-        desired_inner_width = max(original_panel_width, max_line_width + padding_left + padding_right)
-        desired_inner_height = max(original_panel_height, (line_height * len(lines)) + padding_top + padding_bottom)
-        width_delta = desired_inner_width - original_panel_width
-        height_delta = desired_inner_height - original_panel_height
+        orange_layout_ready = all(node is not None for node in (orange_stroke, orange_frame, navy_stroke, navy_panel))
+        if orange_layout_ready:
+            original_panel_width = float(navy_panel.get("width", "0"))
+            original_panel_height = float(navy_panel.get("height", "0"))
+            desired_inner_width = max(original_panel_width, max_line_width + padding_left + padding_right)
+            desired_inner_height = max(original_panel_height, (line_height * len(lines)) + padding_top + padding_bottom)
+            width_delta = desired_inner_width - original_panel_width
+            height_delta = desired_inner_height - original_panel_height
+            for node in (orange_stroke, orange_frame, navy_stroke, navy_panel):
+                node.set("width", f"{max(1.0, float(node.get('width', '0')) + width_delta):.3f}")
+                node.set("height", f"{max(1.0, float(node.get('height', '0')) + height_delta):.3f}")
+        else:
+            self._logger.warning(
+                "[SVG] fallback layout: orange-tag ids missing. has_sticker_group=%s has_text_layer=%s",
+                self._find_first(root, ["sticker_group"]) is not None,
+                self._find_first(root, ["text_layer"]) is not None,
+            )
 
-        for node in (orange_stroke, orange_frame, navy_stroke, navy_panel):
-            node.set("width", f"{max(1.0, float(node.get('width', '0')) + width_delta):.3f}")
-            node.set("height", f"{max(1.0, float(node.get('height', '0')) + height_delta):.3f}")
-
-        left_bound = min(float(orange_stroke.get("x", "0")), float(orange_frame.get("x", "0")), float(navy_stroke.get("x", "0")), float(navy_panel.get("x", "0")))
-        right_bound = max(
-            float(orange_stroke.get("x", "0")) + float(orange_stroke.get("width", "0")),
-            float(orange_frame.get("x", "0")) + float(orange_frame.get("width", "0")),
-            float(navy_stroke.get("x", "0")) + float(navy_stroke.get("width", "0")),
-            float(navy_panel.get("x", "0")) + float(navy_panel.get("width", "0")),
-        )
-        top_bound = min(float(orange_stroke.get("y", "0")), float(orange_frame.get("y", "0")), float(navy_stroke.get("y", "0")), float(navy_panel.get("y", "0")))
-        bottom_bound = max(
-            float(orange_stroke.get("y", "0")) + float(orange_stroke.get("height", "0")),
-            float(orange_frame.get("y", "0")) + float(orange_frame.get("height", "0")),
-            float(navy_stroke.get("y", "0")) + float(navy_stroke.get("height", "0")),
-            float(navy_panel.get("y", "0")) + float(navy_panel.get("height", "0")),
-        )
+        if orange_layout_ready:
+            left_bound = min(float(orange_stroke.get("x", "0")), float(orange_frame.get("x", "0")), float(navy_stroke.get("x", "0")), float(navy_panel.get("x", "0")))
+            right_bound = max(
+                float(orange_stroke.get("x", "0")) + float(orange_stroke.get("width", "0")),
+                float(orange_frame.get("x", "0")) + float(orange_frame.get("width", "0")),
+                float(navy_stroke.get("x", "0")) + float(navy_stroke.get("width", "0")),
+                float(navy_panel.get("x", "0")) + float(navy_panel.get("width", "0")),
+            )
+            top_bound = min(float(orange_stroke.get("y", "0")), float(orange_frame.get("y", "0")), float(navy_stroke.get("y", "0")), float(navy_panel.get("y", "0")))
+            bottom_bound = max(
+                float(orange_stroke.get("y", "0")) + float(orange_stroke.get("height", "0")),
+                float(orange_frame.get("y", "0")) + float(orange_frame.get("height", "0")),
+                float(navy_stroke.get("y", "0")) + float(navy_stroke.get("height", "0")),
+                float(navy_panel.get("y", "0")) + float(navy_panel.get("height", "0")),
+            )
+        else:
+            left_bound, top_bound, right_bound, bottom_bound = self._node_bbox(navy_panel, vb_x, vb_y, vb_width, vb_height)
 
         visible_width = right_bound - left_bound
         visible_height = bottom_bound - top_bound
@@ -273,6 +291,36 @@ class SVGHighlightRenderer:
         if node is None:
             raise ValueError(f"Template missing id='{element_id}'.")
         return node
+
+    @staticmethod
+    def _find_first(root: ET.Element, element_ids: list[str]) -> ET.Element | None:
+        for element_id in element_ids:
+            node = root.find(f".//*[@id='{element_id}']")
+            if node is not None:
+                return node
+        return None
+
+    @staticmethod
+    def _node_bbox(node: ET.Element, vb_x: float, vb_y: float, vb_width: float, vb_height: float) -> tuple[float, float, float, float]:
+        x = float(node.get("x", vb_x))
+        y = float(node.get("y", vb_y))
+        w = float(node.get("width", vb_width))
+        h = float(node.get("height", vb_height))
+        if (w <= 0 or h <= 0) and node.tag.endswith("g"):
+            xs: list[float] = []
+            ys: list[float] = []
+            xe: list[float] = []
+            ye: list[float] = []
+            for child in list(node):
+                cx = float(child.get("x", x))
+                cy = float(child.get("y", y))
+                cw = float(child.get("width", 0))
+                ch = float(child.get("height", 0))
+                if cw > 0 and ch > 0:
+                    xs.append(cx); ys.append(cy); xe.append(cx + cw); ye.append(cy + ch)
+            if xs:
+                return min(xs), min(ys), max(xe), max(ye)
+        return x, y, x + max(1.0, w), y + max(1.0, h)
 
     @staticmethod
     def _resolve_font_size(text_node: ET.Element, font_size: float, base_height: float) -> float:
