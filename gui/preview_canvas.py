@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
 from types import SimpleNamespace
+import traceback
 
 from core.normalized_layout import NormalizedLayoutEngine
 from core.overlays.highlight_library import HighlightStyleManager
@@ -380,10 +380,17 @@ if QLabel:
                 return
             template = template_manager.get(str(data["template"]))
             canvas = self._canvas_rect()
-            key = (kind, str(data["text"]), str(data["template"]), float(data["font_size"]), round(canvas.width()), round(canvas.height()))
+            svg_template = getattr(template_manager, "svg_template_path", lambda _name: None)(str(data["template"]))
+            svg_mtime_ns = 0
+            if svg_template:
+                try:
+                    from utils.ffmpeg_helper import app_root
+                    svg_mtime_ns = (app_root() / svg_template).stat().st_mtime_ns
+                except OSError:
+                    svg_mtime_ns = 0
+            key = (kind, str(data["text"]), str(data["template"]), float(data["font_size"]), round(canvas.width()), round(canvas.height()), svg_mtime_ns)
             pixmap = self._typography_pixmap_cache.get(key)
             if pixmap is None:
-                svg_template = getattr(template_manager, "svg_template_path", lambda _name: None)(str(data["template"]))
                 try:
                     if svg_template:
                         image = self._svg_highlight_renderer.render_image(
@@ -415,7 +422,7 @@ if QLabel:
                         round(canvas.width()),
                         round(canvas.height()),
                     )
-                    self.previewMotionDebug.emit(f"[SVG][ERROR] {exc}")
+                    self.previewMotionDebug.emit(f"[SVG][ERROR] {exc}\n{traceback.format_exc()}")
                 pixmap = QPixmap.fromImage(image)
                 self._typography_pixmap_cache[key] = pixmap
             data["w"] = pixmap.width()

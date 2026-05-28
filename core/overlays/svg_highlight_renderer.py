@@ -69,6 +69,7 @@ class SVGHighlightRenderer:
     def _build_svg_bytes(self, template_path: str, text: str, font_size: float, canvas_width: int):
         source_path = app_root() / template_path
         self._logger.info("[SVG] loading template path=%s", source_path.resolve())
+        self._logger.info("[SVG] exists=%s", source_path.exists())
         if not source_path.exists():
             raise FileNotFoundError(f"SVG template not found: {source_path}")
         raw = source_path.read_text(encoding="utf-8")
@@ -83,8 +84,6 @@ class SVGHighlightRenderer:
         vb_height = float(view_box[3])
 
         text_node = self._find_optional(root, "dynamic_text") or self._find_optional(root, "text_layer")
-        if text_node is None:
-            raise ValueError("Template missing text reference layer (dynamic_text/text_layer).")
         raw_text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
         lines = raw_text.split("\n")
         if not lines or all(not line.strip() for line in lines):
@@ -105,7 +104,11 @@ class SVGHighlightRenderer:
         padding_bottom = 40.0
 
         if navy_panel is None:
-            navy_panel = self._find_required(root, "text_safe_area")
+            navy_panel = self._find_optional(root, "text_safe_area")
+        if navy_panel is None and text_node is not None:
+            navy_panel = self._rect_from_text_node(text_node, vb_width, vb_height)
+        if navy_panel is None:
+            navy_panel = self._rect_from_viewbox(vb_x, vb_y, vb_width, vb_height)
 
         original_panel_width = float(navy_panel.get("width", "0"))
         original_panel_height = float(navy_panel.get("height", "0"))
@@ -135,8 +138,11 @@ class SVGHighlightRenderer:
                 float(navy_panel.get("y", "0")) + float(navy_panel.get("height", "0")),
             )
         else:
-            sticker_group = self._find_required(root, "sticker_group")
-            left_bound, top_bound, right_bound, bottom_bound = self._collect_bounds(sticker_group)
+            sticker_group = self._find_optional(root, "sticker_group")
+            if sticker_group is not None:
+                left_bound, top_bound, right_bound, bottom_bound = self._collect_bounds(sticker_group, (vb_x, vb_y, vb_x + vb_width, vb_y + vb_height))
+            else:
+                left_bound, top_bound, right_bound, bottom_bound = vb_x, vb_y, vb_x + vb_width, vb_y + vb_height
 
         visible_width = right_bound - left_bound
         visible_height = bottom_bound - top_bound
@@ -145,9 +151,10 @@ class SVGHighlightRenderer:
         root.set("viewBox", f"{left_bound:.3f} {top_bound:.3f} {visible_width:.3f} {visible_height:.3f}")
 
         # Remove text from SVG render path; it is painted manually for reliability.
-        text_node.text = ""
-        for child in list(text_node):
-            text_node.remove(child)
+        if text_node is not None:
+            text_node.text = ""
+            for child in list(text_node):
+                text_node.remove(child)
 
         text_x = float(navy_panel.get("x", "0")) + padding_left
         panel_y = float(navy_panel.get("y", "0"))
@@ -285,10 +292,10 @@ class SVGHighlightRenderer:
         return node
 
     @staticmethod
-    def _resolve_font_size(text_node: ET.Element, font_size: float, base_height: float) -> float:
+    def _resolve_font_size(text_node: ET.Element | None, font_size: float, base_height: float) -> float:
         if font_size > 1.0:
             return max(10.0, float(font_size))
-        current = text_node.get("font-size")
+        current = text_node.get("font-size") if text_node is not None else None
         if current:
             try:
                 return max(10.0, float(current))
@@ -315,7 +322,7 @@ class SVGHighlightRenderer:
         return root.find(f".//*[@id='{element_id}']")
 
     @staticmethod
-    def _collect_bounds(group: ET.Element) -> tuple[float, float, float, float]:
+    def _collect_bounds(group: ET.Element, fallback: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
         min_x = float("inf")
         min_y = float("inf")
         max_x = float("-inf")
@@ -335,5 +342,19 @@ class SVGHighlightRenderer:
             max_x = max(max_x, xf + wf)
             max_y = max(max_y, yf + hf)
         if min_x == float("inf"):
-            raise ValueError("sticker_group has no measurable rectangular elements.")
+            return fallback
         return min_x, min_y, max_x, max_y
+
+    @staticmethod
+    def _rect_from_text_node(text_node: ET.Element, vb_width: float, vb_height: float) -> ET.Element:
+        x = text_node.get("x")
+        y = text_node.get("y")
+        tx = float(x.split()[0]) if x else vb_width * 0.10
+        ty = float(y.split()[0]) if y else vb_height * 0.55
+        width = vb_width * 0.70
+        height = vb_height * 0.35
+        return ET.Element("rect", {"x": f"{tx:.3f}", "y": f"{max(0.0, ty - height * 0.7):.3f}", "width": f"{width:.3f}", "height": f"{height:.3f}"})
+
+    @staticmethod
+    def _rect_from_viewbox(vb_x: float, vb_y: float, vb_width: float, vb_height: float) -> ET.Element:
+        return ET.Element("rect", {"x": f"{vb_x:.3f}", "y": f"{vb_y:.3f}", "width": f"{vb_width:.3f}", "height": f"{vb_height:.3f}"})
