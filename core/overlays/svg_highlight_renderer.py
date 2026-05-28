@@ -82,7 +82,9 @@ class SVGHighlightRenderer:
         vb_width = float(view_box[2])
         vb_height = float(view_box[3])
 
-        text_node = self._find_required(root, "dynamic_text")
+        text_node = self._find_first(root, ("dynamic_text", "text_layer", "text_x5F_layer"))
+        if text_node is None:
+            raise ValueError("Template missing text reference layer.")
         raw_text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
         lines = raw_text.split("\n")
         if not lines or all(not line.strip() for line in lines):
@@ -92,10 +94,12 @@ class SVGHighlightRenderer:
         effective_font_size = resolved_font_size * self.TEXT_SIZE_MULTIPLIER
         max_line_width, line_height = self._measure_text_block(lines, effective_font_size)
 
-        orange_stroke = self._find_required(root, "orange_stroke")
-        orange_frame = self._find_required(root, "orange_frame")
-        navy_stroke = self._find_required(root, "navy_stroke")
-        navy_panel = self._find_required(root, "navy_panel")
+        orange_stroke = self._find_first(root, ("orange_stroke",))
+        orange_frame = self._find_first(root, ("orange_frame",))
+        navy_stroke = self._find_first(root, ("navy_stroke",))
+        navy_panel = self._find_first(root, ("navy_panel", "text_safe_area", "text_x5F_safe_x5F_area"))
+        if navy_panel is None:
+            raise ValueError("Template missing text safe area panel.")
 
         padding_left = 60.0
         padding_right = 60.0
@@ -109,24 +113,15 @@ class SVGHighlightRenderer:
         width_delta = desired_inner_width - original_panel_width
         height_delta = desired_inner_height - original_panel_height
 
-        for node in (orange_stroke, orange_frame, navy_stroke, navy_panel):
+        panel_nodes = [node for node in (orange_stroke, orange_frame, navy_stroke, navy_panel) if node is not None]
+        for node in panel_nodes:
             node.set("width", f"{max(1.0, float(node.get('width', '0')) + width_delta):.3f}")
             node.set("height", f"{max(1.0, float(node.get('height', '0')) + height_delta):.3f}")
 
-        left_bound = min(float(orange_stroke.get("x", "0")), float(orange_frame.get("x", "0")), float(navy_stroke.get("x", "0")), float(navy_panel.get("x", "0")))
-        right_bound = max(
-            float(orange_stroke.get("x", "0")) + float(orange_stroke.get("width", "0")),
-            float(orange_frame.get("x", "0")) + float(orange_frame.get("width", "0")),
-            float(navy_stroke.get("x", "0")) + float(navy_stroke.get("width", "0")),
-            float(navy_panel.get("x", "0")) + float(navy_panel.get("width", "0")),
-        )
-        top_bound = min(float(orange_stroke.get("y", "0")), float(orange_frame.get("y", "0")), float(navy_stroke.get("y", "0")), float(navy_panel.get("y", "0")))
-        bottom_bound = max(
-            float(orange_stroke.get("y", "0")) + float(orange_stroke.get("height", "0")),
-            float(orange_frame.get("y", "0")) + float(orange_frame.get("height", "0")),
-            float(navy_stroke.get("y", "0")) + float(navy_stroke.get("height", "0")),
-            float(navy_panel.get("y", "0")) + float(navy_panel.get("height", "0")),
-        )
+        left_bound = min(float(node.get("x", "0")) for node in panel_nodes)
+        right_bound = max(float(node.get("x", "0")) + float(node.get("width", "0")) for node in panel_nodes)
+        top_bound = min(float(node.get("y", "0")) for node in panel_nodes)
+        bottom_bound = max(float(node.get("y", "0")) + float(node.get("height", "0")) for node in panel_nodes)
 
         visible_width = right_bound - left_bound
         visible_height = bottom_bound - top_bound
@@ -266,6 +261,14 @@ class SVGHighlightRenderer:
             debug_path.write_bytes(svg_bytes)
         except Exception:
             pass
+
+    @staticmethod
+    def _find_first(root: ET.Element, element_ids: tuple[str, ...]) -> ET.Element | None:
+        for element_id in element_ids:
+            node = root.find(f".//*[@id='{element_id}']")
+            if node is not None:
+                return node
+        return None
 
     @staticmethod
     def _find_required(root: ET.Element, element_id: str) -> ET.Element:
