@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from xml.etree import ElementTree as ET
 
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -97,21 +98,51 @@ class SVGHighlightRenderer:
         orange_frame = self._find_optional(root, "orange_frame")
         navy_stroke = self._find_optional(root, "navy_stroke")
         navy_panel = self._find_optional(root, "navy_panel")
+        sticker_group = self._find_optional(root, "sticker_group")
+        text_safe_area = self._find_optional(root, "text_safe_area")
 
         padding_left = 60.0
         padding_right = 60.0
         padding_top = 40.0
         padding_bottom = 40.0
 
-        if navy_panel is None:
-            navy_panel = self._find_optional(root, "text_safe_area")
-        if navy_panel is None and text_node is not None:
-            navy_panel = self._rect_from_text_node(text_node, vb_width, vb_height)
-        if navy_panel is None:
-            navy_panel = self._rect_from_viewbox(vb_x, vb_y, vb_width, vb_height)
+        svg_bbox = (vb_x, vb_y, vb_x + vb_width, vb_y + vb_height)
+        sticker_bbox = self._collect_bounds(sticker_group, svg_bbox) if sticker_group is not None else None
+        text_safe_bbox = self._element_bbox(text_safe_area) if text_safe_area is not None else None
+        text_layer_bbox = self._element_bbox(text_node) if text_node is not None else None
 
-        original_panel_width = float(navy_panel.get("width", "0"))
-        original_panel_height = float(navy_panel.get("height", "0"))
+        layout_source = "viewBox"
+        if text_safe_bbox is not None:
+            layout_source = "text_safe_area"
+            panel_x, panel_y, panel_right, panel_bottom = text_safe_bbox
+        elif navy_panel is not None:
+            layout_source = "navy_panel"
+            panel_x, panel_y, panel_right, panel_bottom = self._element_bbox(navy_panel) or svg_bbox
+        elif text_layer_bbox is not None:
+            layout_source = "text_layer"
+            panel_x, panel_y, panel_right, panel_bottom = text_layer_bbox
+        else:
+            panel_x, panel_y, panel_right, panel_bottom = svg_bbox
+        panel_w = max(1.0, panel_right - panel_x)
+        panel_h = max(1.0, panel_bottom - panel_y)
+
+        self._logger.info("[SVG_BBOX] svg=%s", self._format_bbox(svg_bbox))
+        self._logger.info("[SVG_BBOX] sticker_group=%s", self._format_bbox(sticker_bbox))
+        self._logger.info("[SVG_BBOX] text_safe_area=%s", self._format_bbox(text_safe_bbox))
+        self._logger.info("[SVG_BBOX] text_layer=%s", self._format_bbox(text_layer_bbox))
+        self._logger.info("[SVG_BBOX] dynamic_text_layout_source=%s bbox=%s", layout_source, self._format_bbox((panel_x, panel_y, panel_right, panel_bottom)))
+
+        if text_safe_bbox is not None:
+            available_text_width = max(1.0, panel_w - padding_left - padding_right)
+            available_text_height = max(1.0, panel_h - padding_top - padding_bottom)
+            if max_line_width > available_text_width or line_height * len(lines) > available_text_height:
+                fit_scale = min(available_text_width / max(1.0, max_line_width), available_text_height / max(1.0, line_height * len(lines)))
+                effective_font_size = max(1.0, effective_font_size * min(1.0, fit_scale))
+                max_line_width, line_height = self._measure_text_block(lines, effective_font_size)
+                self._logger.info("[SVG_TEXT] fit_to_text_safe_area scale=%s effective_font_size=%s", round(fit_scale, 4), effective_font_size)
+
+        original_panel_width = panel_w
+        original_panel_height = panel_h
         desired_inner_width = max(original_panel_width, max_line_width + padding_left + padding_right)
         desired_inner_height = max(original_panel_height, (line_height * len(lines)) + padding_top + padding_bottom)
         width_delta = desired_inner_width - original_panel_width
@@ -123,26 +154,24 @@ class SVGHighlightRenderer:
             node.set("height", f"{max(1.0, float(node.get('height', '0')) + height_delta):.3f}")
 
         if orange_stroke is not None and orange_frame is not None and navy_stroke is not None:
-            left_bound = min(float(orange_stroke.get("x", "0")), float(orange_frame.get("x", "0")), float(navy_stroke.get("x", "0")), float(navy_panel.get("x", "0")))
+            left_bound = min(float(orange_stroke.get("x", "0")), float(orange_frame.get("x", "0")), float(navy_stroke.get("x", "0")), panel_x)
             right_bound = max(
                 float(orange_stroke.get("x", "0")) + float(orange_stroke.get("width", "0")),
                 float(orange_frame.get("x", "0")) + float(orange_frame.get("width", "0")),
                 float(navy_stroke.get("x", "0")) + float(navy_stroke.get("width", "0")),
-                float(navy_panel.get("x", "0")) + float(navy_panel.get("width", "0")),
+                panel_x + max(panel_w, desired_inner_width),
             )
-            top_bound = min(float(orange_stroke.get("y", "0")), float(orange_frame.get("y", "0")), float(navy_stroke.get("y", "0")), float(navy_panel.get("y", "0")))
+            top_bound = min(float(orange_stroke.get("y", "0")), float(orange_frame.get("y", "0")), float(navy_stroke.get("y", "0")), panel_y)
             bottom_bound = max(
                 float(orange_stroke.get("y", "0")) + float(orange_stroke.get("height", "0")),
                 float(orange_frame.get("y", "0")) + float(orange_frame.get("height", "0")),
                 float(navy_stroke.get("y", "0")) + float(navy_stroke.get("height", "0")),
-                float(navy_panel.get("y", "0")) + float(navy_panel.get("height", "0")),
+                panel_y + max(panel_h, desired_inner_height),
             )
+        elif sticker_bbox is not None:
+            left_bound, top_bound, right_bound, bottom_bound = sticker_bbox
         else:
-            sticker_group = self._find_optional(root, "sticker_group")
-            if sticker_group is not None:
-                left_bound, top_bound, right_bound, bottom_bound = self._collect_bounds(sticker_group, (vb_x, vb_y, vb_x + vb_width, vb_y + vb_height))
-            else:
-                left_bound, top_bound, right_bound, bottom_bound = vb_x, vb_y, vb_x + vb_width, vb_y + vb_height
+            left_bound, top_bound, right_bound, bottom_bound = svg_bbox
 
         visible_width = right_bound - left_bound
         visible_height = bottom_bound - top_bound
@@ -150,15 +179,16 @@ class SVGHighlightRenderer:
         root.set("height", f"{visible_height:.3f}")
         root.set("viewBox", f"{left_bound:.3f} {top_bound:.3f} {visible_width:.3f} {visible_height:.3f}")
 
-        # Remove text from SVG render path; it is painted manually for reliability.
+        # Remove reference-only layout nodes from the SVG render path; dynamic text is painted manually.
         if text_node is not None:
             text_node.text = ""
             for child in list(text_node):
                 text_node.remove(child)
+        if text_safe_area is not None:
+            self._remove_element(root, text_safe_area)
 
-        text_x = float(navy_panel.get("x", "0")) + padding_left
-        panel_y = float(navy_panel.get("y", "0"))
-        panel_h = float(navy_panel.get("height", "0"))
+        text_align = "center" if text_safe_bbox is not None else "left"
+        text_x = panel_x + (panel_w / 2.0 if text_align == "center" else padding_left)
         text_block_h = line_height * len(lines)
         first_line_y = panel_y + (panel_h - text_block_h) / 2.0 + line_height * 0.8
         line_y_values = [first_line_y + i * line_height for i in range(len(lines))]
@@ -188,8 +218,10 @@ class SVGHighlightRenderer:
             "font_size": effective_font_size,
             "text_x": text_x,
             "line_y_values": line_y_values,
-            "panel_rect": (float(navy_panel.get("x", "0")), float(navy_panel.get("y", "0")), float(navy_panel.get("width", "0")), float(navy_panel.get("height", "0"))),
+            "panel_rect": (panel_x, panel_y, panel_w, panel_h),
             "padding_left": padding_left,
+            "text_align": text_align,
+            "layout_source": layout_source,
             "view_box": (left_bound, top_bound, visible_width, visible_height),
         }
         return svg_bytes, target_width, target_height, text_layout
@@ -224,11 +256,17 @@ class SVGHighlightRenderer:
         panel_y_px = (panel_y - left * 0 + 0 - top) * sy
         panel_h_px = panel_h * sy
         baseline_y = panel_y_px + (panel_h_px - text_block_h) / 2.0 + metrics.ascent()
-        text_x_px = ((panel_x + float(layout.get("padding_left", 60.0))) - left) * sx
+        text_align = str(layout.get("text_align", "left"))
+        if text_align == "center":
+            text_anchor_px = (panel_x + panel_w / 2.0 - left) * sx
+        else:
+            text_anchor_px = ((panel_x + float(layout.get("padding_left", 60.0))) - left) * sx
 
         try:
             for i, line in enumerate(lines):
-                painter.drawText(text_x_px, baseline_y + i * line_spacing, line if line else " ")
+                draw_text = line if line else " "
+                text_x_px = text_anchor_px - metrics.horizontalAdvance(draw_text) / 2.0 if text_align == "center" else text_anchor_px
+                painter.drawText(text_x_px, baseline_y + i * line_spacing, draw_text)
         except Exception as exc:
             self._logger.exception("[SVG_TEXT] paint primary failed, fallback Arial draw. err=%s", exc)
             fallback = QFont("Arial")
@@ -284,6 +322,203 @@ class SVGHighlightRenderer:
         except Exception:
             pass
 
+
+    @classmethod
+    def _element_bbox(cls, node: ET.Element | None) -> tuple[float, float, float, float] | None:
+        if node is None:
+            return None
+        rect = cls._rect_tuple_from_element(node)
+        if rect is not None:
+            return rect
+        circle = cls._circle_bbox(node)
+        if circle is not None:
+            return circle
+        path = cls._path_bbox(node)
+        if path is not None:
+            return path
+        text = cls._text_bbox(node)
+        if text is not None:
+            return text
+        return None
+
+    @staticmethod
+    def _format_bbox(bbox: tuple[float, float, float, float] | None) -> str:
+        if bbox is None:
+            return "missing"
+        left, top, right, bottom = bbox
+        return f"x={left:.3f}, y={top:.3f}, w={right - left:.3f}, h={bottom - top:.3f}, right={right:.3f}, bottom={bottom:.3f}"
+
+    @staticmethod
+    def _rect_tuple_from_element(node: ET.Element | None) -> tuple[float, float, float, float] | None:
+        if node is None:
+            return None
+        x = node.get("x")
+        y = node.get("y")
+        width = node.get("width")
+        height = node.get("height")
+        if x is None or y is None or width is None or height is None:
+            return None
+        try:
+            left = float(str(x).split()[0])
+            top = float(str(y).split()[0])
+            right = left + float(str(width).split()[0])
+            bottom = top + float(str(height).split()[0])
+        except ValueError:
+            return None
+        return left, top, right, bottom
+
+    @staticmethod
+    def _circle_bbox(node: ET.Element | None) -> tuple[float, float, float, float] | None:
+        if node is None:
+            return None
+        try:
+            cx = float(node.get("cx", ""))
+            cy = float(node.get("cy", ""))
+            rx = float(node.get("rx", node.get("r", "")))
+            ry = float(node.get("ry", node.get("r", "")))
+        except ValueError:
+            return None
+        return cx - rx, cy - ry, cx + rx, cy + ry
+
+    @classmethod
+    def _path_bbox(cls, node: ET.Element | None) -> tuple[float, float, float, float] | None:
+        if node is None:
+            return None
+        d = node.get("d")
+        if not d:
+            return None
+        tokens = re.findall(r"[MmLlHhVvCcSsQqTtAaZz]|[-+]?(?:\d*\.\d+|\d+)(?:[eE][-+]?\d+)?", d)
+        if not tokens:
+            return None
+        points: list[tuple[float, float]] = []
+        x = y = start_x = start_y = 0.0
+        command = ""
+        i = 0
+
+        def is_command(value: str) -> bool:
+            return bool(re.fullmatch(r"[A-Za-z]", value))
+
+        def read_number() -> float | None:
+            nonlocal i
+            if i >= len(tokens) or is_command(tokens[i]):
+                return None
+            value = float(tokens[i])
+            i += 1
+            return value
+
+        try:
+            while i < len(tokens):
+                if is_command(tokens[i]):
+                    command = tokens[i]
+                    i += 1
+                    if command in "Zz":
+                        x, y = start_x, start_y
+                        points.append((x, y))
+                        continue
+                if not command:
+                    break
+                relative = command.islower()
+                upper = command.upper()
+                if upper == "M":
+                    nx = read_number()
+                    ny = read_number()
+                    if nx is None or ny is None:
+                        break
+                    x = x + nx if relative else nx
+                    y = y + ny if relative else ny
+                    start_x, start_y = x, y
+                    points.append((x, y))
+                    command = "l" if relative else "L"
+                elif upper == "L":
+                    nx = read_number()
+                    ny = read_number()
+                    if nx is None or ny is None:
+                        break
+                    x = x + nx if relative else nx
+                    y = y + ny if relative else ny
+                    points.append((x, y))
+                elif upper == "H":
+                    nx = read_number()
+                    if nx is None:
+                        break
+                    x = x + nx if relative else nx
+                    points.append((x, y))
+                elif upper == "V":
+                    ny = read_number()
+                    if ny is None:
+                        break
+                    y = y + ny if relative else ny
+                    points.append((x, y))
+                elif upper == "C":
+                    values = [read_number() for _ in range(6)]
+                    if any(value is None for value in values):
+                        break
+                    for px, py in ((values[0], values[1]), (values[2], values[3]), (values[4], values[5])):
+                        assert px is not None and py is not None
+                        points.append((x + px if relative else px, y + py if relative else py))
+                    assert values[4] is not None and values[5] is not None
+                    x = x + values[4] if relative else values[4]
+                    y = y + values[5] if relative else values[5]
+                else:
+                    # Unsupported path command; consume numeric pairs as conservative absolute/relative points.
+                    nx = read_number()
+                    ny = read_number()
+                    if nx is None or ny is None:
+                        break
+                    x = x + nx if relative else nx
+                    y = y + ny if relative else ny
+                    points.append((x, y))
+        except (ValueError, TypeError):
+            return None
+        if not points:
+            return None
+        xs = [point[0] for point in points]
+        ys = [point[1] for point in points]
+        return min(xs), min(ys), max(xs), max(ys)
+
+    @staticmethod
+    def _text_bbox(node: ET.Element | None) -> tuple[float, float, float, float] | None:
+        if node is None:
+            return None
+        font_size = node.get("font-size")
+        classes = node.get("class", "")
+        if font_size is None and "st7" in classes:
+            font_size = "44.9617"
+        try:
+            size = float(font_size) if font_size else 44.0
+        except ValueError:
+            size = 44.0
+        x = node.get("x")
+        y = node.get("y")
+        transform = node.get("transform", "")
+        tx = ty = None
+        if x and y:
+            try:
+                tx = float(x.split()[0])
+                ty = float(y.split()[0])
+            except ValueError:
+                tx = ty = None
+        if tx is None or ty is None:
+            numbers = [float(value) for value in re.findall(r"[-+]?(?:\d*\.\d+|\d+)(?:[eE][-+]?\d+)?", transform)]
+            if transform.startswith("matrix") and len(numbers) >= 6:
+                tx, ty = numbers[4], numbers[5]
+            elif len(numbers) >= 2:
+                tx, ty = numbers[-2], numbers[-1]
+        if tx is None or ty is None:
+            return None
+        text = "".join(node.itertext()) or " "
+        width = max(1.0, len(text) * size * 0.6)
+        height = max(1.0, size * 1.2)
+        return tx, ty - height, tx + width, ty
+
+    @staticmethod
+    def _remove_element(root: ET.Element, target: ET.Element) -> None:
+        for parent in root.iter():
+            for child in list(parent):
+                if child is target:
+                    parent.remove(child)
+                    return
+
     @staticmethod
     def _find_required(root: ET.Element, element_id: str) -> ET.Element:
         node = root.find(f".//*[@id='{element_id}']")
@@ -321,8 +556,8 @@ class SVGHighlightRenderer:
     def _find_optional(root: ET.Element, element_id: str) -> ET.Element | None:
         return root.find(f".//*[@id='{element_id}']")
 
-    @staticmethod
-    def _collect_bounds(group: ET.Element, fallback: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+    @classmethod
+    def _collect_bounds(cls, group: ET.Element, fallback: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
         min_x = float("inf")
         min_y = float("inf")
         max_x = float("-inf")
@@ -330,17 +565,14 @@ class SVGHighlightRenderer:
         for node in group.iter():
             if node is group:
                 continue
-            x = node.get("x")
-            y = node.get("y")
-            w = node.get("width")
-            h = node.get("height")
-            if x is None or y is None or w is None or h is None:
+            bbox = cls._element_bbox(node)
+            if bbox is None:
                 continue
-            xf, yf, wf, hf = float(x), float(y), float(w), float(h)
-            min_x = min(min_x, xf)
-            min_y = min(min_y, yf)
-            max_x = max(max_x, xf + wf)
-            max_y = max(max_y, yf + hf)
+            left, top, right, bottom = bbox
+            min_x = min(min_x, left)
+            min_y = min(min_y, top)
+            max_x = max(max_x, right)
+            max_y = max(max_y, bottom)
         if min_x == float("inf"):
             return fallback
         return min_x, min_y, max_x, max_y
