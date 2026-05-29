@@ -452,13 +452,21 @@ if QMainWindow:
 
 
 
-        def set_overlay_transform(self, kind: str, scale: float, rotation: float) -> None:
+        def set_overlay_transform(self, kind: str, scale: float, rotation: float, width: float = 0.0, height: float = 0.0) -> None:
             if kind == "highlight" or kind.startswith("highlight_"):
                 overlay = self._overlay_by_key(kind)
                 if overlay is None:
                     return
                 overlay.scale = min(max(float(scale), 0.2), 4.0)
                 overlay.rotation = float(rotation)
+                overlay.width = max(0.0, float(width))
+                overlay.height = max(0.0, float(height))
+                self.append_log(
+                    f"[PREVIEW_TRANSFORM_STATE] key={kind} x={overlay.x:.4f} y={overlay.y:.4f} "
+                    f"width={overlay.width:.1f} height={overlay.height:.1f} scale={overlay.scale:.4f} "
+                    f"rotation={overlay.rotation:.2f} font_size={overlay.effective_font_ratio():.6f} "
+                    f"style={overlay.style} animation={overlay.motion.value} anchor=center"
+                )
                 self.update_highlight_preview()
 
         def delete_overlay_by_key(self, key: str) -> None:
@@ -638,6 +646,8 @@ if QMainWindow:
                     "end": overlay.end_time,
                     "scale": getattr(overlay, "scale", 1.0),
                     "rotation": getattr(overlay, "rotation", 0.0),
+                    "width": getattr(overlay, "width", 0.0) or 280,
+                    "height": getattr(overlay, "height", 0.0) or 96,
                 })
             self.preview.set_highlight_layers(layers, selected_key=self._highlight_key(self.selected_highlight_index))
             self.refresh_highlight_list()
