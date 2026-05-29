@@ -37,59 +37,18 @@ class TextEngine:
         x, y, enable = self.motion.position_expr(overlay.x, overlay.y, overlay.motion, overlay.start_time, overlay.end_time, overlay.motion_speed, overlay.motion_strength)
         template_name = getattr(overlay, "template", getattr(overlay, "style", ""))
         svg_template = getattr(self.templates, "svg_template_path", lambda _name: None)(template_name)
-        base_scale = min(max(float(getattr(overlay, "scale", 1.0) or 1.0), 0.01), 10.0)
-        base_width = "iw" if abs(base_scale - 1.0) < 0.001 else f"iw*{base_scale:.6f}"
         if svg_template:
-            width_expr, height_expr = self._svg_highlight_scale_expr(base_width, overlay)
-        else:
+            user_scale = min(max(float(getattr(overlay, "scale", 1.0) or 1.0), 0.01), 10.0)
+            base_width = "iw" if abs(user_scale - 1.0) < 0.001 else f"iw*{user_scale:.6f}"
             width_expr, height_expr = self.motion.region_scale_expr(base_width, overlay.motion, overlay.start_time, overlay.end_time, speed=overlay.motion_speed, strength=overlay.motion_strength)
+        else:
+            width_expr, height_expr = self.motion.region_scale_expr("iw", overlay.motion, overlay.start_time, overlay.end_time, speed=overlay.motion_speed, strength=overlay.motion_strength)
         alpha_filter = self.motion.alpha_filter(overlay.motion, overlay.start_time, overlay.end_time, speed=overlay.motion_speed, strength=overlay.motion_strength)
-        rotation_expr = self.motion.rotation_expr(float(getattr(overlay, "rotation", 0.0) or 0.0), overlay.motion, overlay.start_time, overlay.motion_speed, overlay.motion_strength)
         chain = (
-            f"[{text_label}]scale=w='{width_expr}':h='{height_expr}':eval=frame,"
-            f"rotate='{rotation_expr}':ow=rotw(iw):oh=roth(ih):c=none"
-            f"{alpha_filter}[{prepared}];"
+            f"[{text_label}]scale=w='{width_expr}':h='{height_expr}':eval=frame{alpha_filter}[{prepared}];"
             f"[{video_label}][{prepared}]overlay=x={x}:y={y}:eval=frame:enable='{enable}'[{out}]"
         )
         return chain, out
-
-    def _svg_highlight_scale_expr(self, base_width: str, overlay: TextOverlay) -> tuple[str, str]:
-        """Apply user scale once, then clamp SVG highlight animation to a small multiplier."""
-        factor = self.motion._scale_factor_expr(overlay.motion, overlay.start_time, overlay.end_time, overlay.motion_speed, overlay.motion_strength)
-        if factor == "1.00":
-            return base_width, "-1"
-        animation_scale = f"min(max({factor}\\,0.92)\\,1.08)"
-        return f"({base_width})*({animation_scale})", "-1"
-
-    def _log_svg_frame_scale_debug(
-        self,
-        overlay: TextOverlay,
-        base_width: float,
-        base_height: float,
-        output_resolution: tuple[int, int],
-        render_mode: str,
-    ) -> None:
-        user_scale = min(max(float(getattr(overlay, "scale", 1.0) or 1.0), 0.01), 10.0)
-        for frame_index in range(5):
-            local_t = max(0.0, (frame_index / 30.0 - float(overlay.start_time)) * max(float(overlay.motion_speed), 0.05))
-            raw_animation_scale = self.motion.preview_scale(overlay.motion, local_t, max(float(overlay.end_time - overlay.start_time), 0.1), float(overlay.motion_strength))
-            animation_scale = min(max(raw_animation_scale, 0.92), 1.08)
-            final_draw_width = base_width * user_scale * animation_scale if base_width else 0.0
-            final_draw_height = base_height * user_scale * animation_scale if base_height else 0.0
-            self._logger.info(
-                "[SVG_FRAME_SCALE] frame_index=%s base_image_width=%.3f base_image_height=%.3f "
-                "user_scale=%.6f animation_scale=%.6f final_draw_width=%.3f final_draw_height=%.3f "
-                "output_resolution=%s render_mode=%s",
-                frame_index,
-                base_width,
-                base_height,
-                user_scale,
-                animation_scale,
-                final_draw_width,
-                final_draw_height,
-                output_resolution,
-                render_mode,
-            )
 
     def render_asset(
         self,
@@ -126,12 +85,11 @@ class TextEngine:
                     item_scale=float(getattr(overlay, "scale", 1.0) or 1.0),
                     output_resolution=(canvas_width, canvas_height),
                 )
-                self._log_svg_frame_scale_debug(
+                self._log_svg_scale_debug(
                     overlay,
-                    float(image.width()),
-                    float(image.height()),
-                    (canvas_width, canvas_height),
-                    "export",
+                    base_width=float(image.width()),
+                    base_height=float(image.height()),
+                    output_resolution=(canvas_width, canvas_height),
                 )
                 if not image.save(str(path), "PNG"):
                     raise RuntimeError(f"Unable to write SVG highlight PNG: {path}")
@@ -141,6 +99,47 @@ class TextEngine:
         if temp_files is not None and path not in temp_files:
             temp_files.append(path)
         return path
+
+    def _log_svg_scale_debug(
+        self,
+        overlay: TextOverlay,
+        *,
+        base_width: float,
+        base_height: float,
+        output_resolution: tuple[int, int],
+    ) -> None:
+        user_scale = min(max(float(getattr(overlay, "scale", 1.0) or 1.0), 0.01), 10.0)
+        selection_rect = (
+            float(getattr(overlay, "width", 0.0) or 0.0),
+            float(getattr(overlay, "height", 0.0) or 0.0),
+        )
+        for frame in range(5):
+            local_t = max(0.0, (frame / 30.0 - float(overlay.start_time)) * max(float(overlay.motion_speed), 0.05))
+            animation_scale = self.motion.preview_scale(
+                overlay.motion,
+                local_t,
+                max(float(overlay.end_time - overlay.start_time), 0.1),
+                float(overlay.motion_strength),
+            )
+            final_width = base_width * user_scale * animation_scale
+            final_height = base_height * user_scale * animation_scale
+            self._logger.info(
+                "[SVG_SCALE_DEBUG] frame=%s base_rendered_size=%.3fx%.3f user_scale=%.6f "
+                "animation_scale=%.6f preview_to_output_scale=1.000000 final_draw_size=%.3fx%.3f "
+                "selection_rect=%.3fx%.3f visible_pixmap_rect=%.3fx%.3f output_resolution=%s render_mode=export",
+                frame,
+                base_width,
+                base_height,
+                user_scale,
+                animation_scale,
+                final_width,
+                final_height,
+                selection_rect[0],
+                selection_rect[1],
+                base_width,
+                base_height,
+                output_resolution,
+            )
 
     @staticmethod
     def _new_asset_path() -> Path:
