@@ -96,6 +96,13 @@ class SVGHighlightRenderer:
         raw = source_path.read_text(encoding="utf-8")
         root = ET.fromstring(raw)
         parent_map = self._parent_map(root)
+        root_id = root.attrib.get("id", "")
+        normalized_root_id = self._normalize_svg_id(root_id)
+        is_sticker_beauty_svg_3 = (
+            "sticker_beauty_svg_3" in template_path
+            or source_path.name in {"sticker_beauty_svg_3.svg", "sticker_beauty_03.svg"}
+            or normalized_root_id in {"sticker_beauty_svg_3", "sticker_beauty_03"}
+        )
 
         view_box = root.attrib.get("viewBox", "").strip().replace(",", " ").split()
         if len(view_box) != 4:
@@ -114,7 +121,7 @@ class SVGHighlightRenderer:
             lines = [" "]
 
         resolved_font_size = self._resolve_font_size(text_node, font_size, vb_height)
-        effective_font_size = resolved_font_size * self.TEXT_SIZE_MULTIPLIER
+        effective_font_size = resolved_font_size if is_sticker_beauty_svg_3 else resolved_font_size * self.TEXT_SIZE_MULTIPLIER
         max_line_width, line_height = self._measure_text_block(lines, effective_font_size)
 
         orange_stroke = self._find_optional(root, "orange_stroke")
@@ -174,6 +181,7 @@ class SVGHighlightRenderer:
         self._logger.info("[SVG_SAFE_AREA] used_text_rect=%s source=%s", self._format_bbox((panel_x, panel_y, panel_right, panel_bottom)), layout_source)
         self._logger.info("[SVG_SAFE_AREA] cache_invalidated=%s", True)
 
+        auto_shrink_applied = False
         if layout_source in {"text_safe_area", "text_layer", "sticker_group_safe_padding"}:
             if layout_source == "sticker_group_safe_padding":
                 available_text_width = max(1.0, panel_w)
@@ -181,9 +189,19 @@ class SVGHighlightRenderer:
             else:
                 available_text_width = max(1.0, panel_w - padding_left - padding_right)
                 available_text_height = max(1.0, panel_h - padding_top - padding_bottom)
-            if max_line_width > available_text_width or line_height * len(lines) > available_text_height:
+            should_shrink = max_line_width > available_text_width or line_height * len(lines) > available_text_height
+            if is_sticker_beauty_svg_3:
+                # SVG 3's safe area is a placement guide only. Keep the requested
+                # Highlight Font Size responsive; only protect against extreme
+                # multi-line/text overflow instead of treating the safe-area height
+                # as a hard crop that collapses large user font sizes.
+                should_shrink = max_line_width > max(panel_w, available_text_width) * 1.75
+            if should_shrink:
                 fit_scale = min(available_text_width / max(1.0, max_line_width), available_text_height / max(1.0, line_height * len(lines)))
+                if is_sticker_beauty_svg_3:
+                    fit_scale = max(0.75, fit_scale)
                 effective_font_size = max(1.0, effective_font_size * min(1.0, fit_scale))
+                auto_shrink_applied = True
                 max_line_width, line_height = self._measure_text_block(lines, effective_font_size)
                 self._logger.info("[SVG_TEXT] fit_to_%s scale=%s effective_font_size=%s", layout_source, round(fit_scale, 4), effective_font_size)
 
@@ -219,6 +237,9 @@ class SVGHighlightRenderer:
         else:
             left_bound, top_bound, right_bound, bottom_bound = svg_bbox
 
+        if is_sticker_beauty_svg_3 and sticker_bbox is not None and not (orange_stroke is not None and orange_frame is not None and navy_stroke is not None):
+            left_bound, top_bound, right_bound, bottom_bound = sticker_bbox
+
         visible_width = right_bound - left_bound
         visible_height = bottom_bound - top_bound
         root.set("width", f"{visible_width:.3f}")
@@ -249,6 +270,19 @@ class SVGHighlightRenderer:
         max_target_width = canvas_width * 1.375
         target_width = max(1, int(round(max(min_target_width, min(preferred_target_width, max_target_width)))))
         target_height = max(1, int(round(target_width * (visible_height / max(1.0, visible_width)))))
+
+        if is_sticker_beauty_svg_3:
+            self._logger.info("[SVG3_RENDER_BOUNDS] svg_viewBox = %s", self._format_bbox(svg_bbox))
+            self._logger.info("[SVG3_RENDER_BOUNDS] sticker_group_bounds = %s", self._format_bbox(sticker_bbox))
+            self._logger.info("[SVG3_RENDER_BOUNDS] final_crop_bounds = %s", self._format_bbox((left_bound, top_bound, right_bound, bottom_bound)))
+            self._logger.info("[SVG3_RENDER_BOUNDS] output_image_size = %sx%s", target_width, target_height)
+            self._logger.info("[SVG3_TEXT] requested_font_size = %s", resolved_font_size)
+            self._logger.info("[SVG3_TEXT] effective_font_size = %s", effective_font_size)
+            self._logger.info("[SVG3_TEXT] auto_shrink_applied = %s", auto_shrink_applied)
+            self._logger.info("[SVG3_TEXT] text_safe_area_raw = %s", self._format_bbox(raw_text_safe_bbox))
+            self._logger.info("[SVG3_TEXT] text_safe_area_transformed = %s", self._format_bbox(text_safe_bbox))
+            self._logger.info("[SVG3_TEXT] used_text_rect = %s", self._format_bbox((panel_x, panel_y, panel_right, panel_bottom)))
+            self._logger.info("[SVG3_TEXT] text_draw_pos = x=%s, y_values=%s", round(text_x, 3), [round(v, 3) for v in line_y_values])
 
         self._logger.info("[SVG_TEXT] raw input text = %r", raw_text)
         self._logger.info("[SVG_TEXT] lines = %s", lines)
@@ -438,6 +472,9 @@ class SVGHighlightRenderer:
         path = cls._path_bbox(node)
         if path is not None:
             return cls._apply_transform_to_bbox(path, cls._node_transform_matrix(node, parent_map, include_self=True))
+        points = cls._points_bbox(node)
+        if points is not None:
+            return cls._apply_transform_to_bbox(points, cls._node_transform_matrix(node, parent_map, include_self=True))
         text = cls._text_bbox(node)
         if text is not None:
             return cls._apply_transform_to_bbox(text, cls._node_transform_matrix(node, parent_map, include_self=False))
@@ -551,6 +588,26 @@ class SVGHighlightRenderer:
         except ValueError:
             return None
         return cx - rx, cy - ry, cx + rx, cy + ry
+
+    @staticmethod
+    def _points_bbox(node: ET.Element | None) -> tuple[float, float, float, float] | None:
+        if node is None:
+            return None
+        points_attr = node.get("points")
+        if not points_attr:
+            return None
+        try:
+            values = [float(value) for value in re.findall(r"[-+]?(?:\d*\.\d+|\d+)(?:[eE][-+]?\d+)?", points_attr)]
+        except ValueError:
+            return None
+        if len(values) < 2:
+            return None
+        points = list(zip(values[0::2], values[1::2]))
+        if not points:
+            return None
+        xs = [point[0] for point in points]
+        ys = [point[1] for point in points]
+        return min(xs), min(ys), max(xs), max(ys)
 
     @classmethod
     def _path_bbox(cls, node: ET.Element | None) -> tuple[float, float, float, float] | None:
