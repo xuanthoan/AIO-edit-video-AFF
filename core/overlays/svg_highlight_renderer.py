@@ -95,6 +95,7 @@ class SVGHighlightRenderer:
             raise FileNotFoundError(f"SVG template not found: {source_path}")
         raw = source_path.read_text(encoding="utf-8")
         root = ET.fromstring(raw)
+        parent_map = self._parent_map(root)
 
         view_box = root.attrib.get("viewBox", "").strip().replace(",", " ").split()
         if len(view_box) != 4:
@@ -129,9 +130,10 @@ class SVGHighlightRenderer:
         padding_bottom = 40.0
 
         svg_bbox = (vb_x, vb_y, vb_x + vb_width, vb_y + vb_height)
-        sticker_bbox = self._collect_bounds(sticker_group, svg_bbox) if sticker_group is not None else None
-        text_safe_bbox = self._element_bbox(text_safe_area) if text_safe_area is not None else None
-        text_layer_bbox = self._element_bbox(text_node) if text_node is not None else None
+        sticker_bbox = self._collect_bounds(sticker_group, svg_bbox, parent_map) if sticker_group is not None else None
+        raw_text_safe_bbox = self._element_bbox(text_safe_area) if text_safe_area is not None else None
+        text_safe_bbox = self._element_bbox(text_safe_area, parent_map) if text_safe_area is not None else None
+        text_layer_bbox = self._element_bbox(text_node, parent_map) if text_node is not None else None
 
         layout_source = "viewBox"
         if text_safe_bbox is not None:
@@ -139,7 +141,7 @@ class SVGHighlightRenderer:
             panel_x, panel_y, panel_right, panel_bottom = text_safe_bbox
         elif navy_panel is not None:
             layout_source = "navy_panel"
-            panel_x, panel_y, panel_right, panel_bottom = self._element_bbox(navy_panel) or svg_bbox
+            panel_x, panel_y, panel_right, panel_bottom = self._element_bbox(navy_panel, parent_map) or svg_bbox
         elif text_layer_bbox is not None:
             layout_source = "text_layer"
             panel_x, panel_y, panel_right, panel_bottom = text_layer_bbox
@@ -164,6 +166,13 @@ class SVGHighlightRenderer:
         self._logger.info("[SVG_BBOX] text_safe_area=%s", self._format_bbox(text_safe_bbox))
         self._logger.info("[SVG_BBOX] text_layer=%s", self._format_bbox(text_layer_bbox))
         self._logger.info("[SVG_BBOX] dynamic_text_layout_source=%s bbox=%s", layout_source, self._format_bbox((panel_x, panel_y, panel_right, panel_bottom)))
+        self._logger.info("[SVG_SAFE_AREA] style=%s", root.attrib.get("id", ""))
+        self._logger.info("[SVG_SAFE_AREA] template_path=%s", template_path)
+        self._logger.info("[SVG_SAFE_AREA] raw_text_safe_area=%s", self._format_bbox(raw_text_safe_bbox))
+        self._logger.info("[SVG_SAFE_AREA] transformed_text_safe_area=%s", self._format_bbox(text_safe_bbox))
+        self._logger.info("[SVG_SAFE_AREA] text_layer_bounds=%s", self._format_bbox(text_layer_bbox))
+        self._logger.info("[SVG_SAFE_AREA] used_text_rect=%s source=%s", self._format_bbox((panel_x, panel_y, panel_right, panel_bottom)), layout_source)
+        self._logger.info("[SVG_SAFE_AREA] cache_invalidated=%s", True)
 
         if layout_source in {"text_safe_area", "text_layer", "sticker_group_safe_padding"}:
             if layout_source == "sticker_group_safe_padding":
@@ -402,27 +411,107 @@ class SVGHighlightRenderer:
     def _local_tag(node: ET.Element) -> str:
         return node.tag.rsplit("}", 1)[-1] if "}" in node.tag else node.tag
 
+    @staticmethod
+    def _parent_map(root: ET.Element) -> dict[ET.Element, ET.Element]:
+        return {child: parent for parent in root.iter() for child in list(parent)}
+
     @classmethod
-    def _element_bbox(cls, node: ET.Element | None) -> tuple[float, float, float, float] | None:
+    def _element_bbox(
+        cls,
+        node: ET.Element | None,
+        parent_map: dict[ET.Element, ET.Element] | None = None,
+    ) -> tuple[float, float, float, float] | None:
         if node is None:
             return None
-        if cls._local_tag(node) == "g":
-            group_bbox = cls._collect_bounds(node, (0.0, 0.0, 0.0, 0.0))
+        tag = cls._local_tag(node)
+        if tag == "g":
+            group_bbox = cls._collect_bounds(node, (0.0, 0.0, 0.0, 0.0), parent_map)
             if group_bbox != (0.0, 0.0, 0.0, 0.0):
                 return group_bbox
+            return None
         rect = cls._rect_tuple_from_element(node)
         if rect is not None:
-            return rect
+            return cls._apply_transform_to_bbox(rect, cls._node_transform_matrix(node, parent_map, include_self=True))
         circle = cls._circle_bbox(node)
         if circle is not None:
-            return circle
+            return cls._apply_transform_to_bbox(circle, cls._node_transform_matrix(node, parent_map, include_self=True))
         path = cls._path_bbox(node)
         if path is not None:
-            return path
+            return cls._apply_transform_to_bbox(path, cls._node_transform_matrix(node, parent_map, include_self=True))
         text = cls._text_bbox(node)
         if text is not None:
-            return text
+            return cls._apply_transform_to_bbox(text, cls._node_transform_matrix(node, parent_map, include_self=False))
         return None
+
+    @classmethod
+    def _node_transform_matrix(
+        cls,
+        node: ET.Element,
+        parent_map: dict[ET.Element, ET.Element] | None,
+        *,
+        include_self: bool,
+    ) -> tuple[float, float, float, float, float, float]:
+        matrix = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+        if parent_map is None:
+            return cls._multiply_matrices(matrix, cls._parse_transform(node.get("transform", ""))) if include_self else matrix
+        chain = []
+        current: ET.Element | None = node if include_self else parent_map.get(node)
+        while current is not None:
+            chain.append(current)
+            current = parent_map.get(current)
+        for item in reversed(chain):
+            matrix = cls._multiply_matrices(matrix, cls._parse_transform(item.get("transform", "")))
+        return matrix
+
+    @staticmethod
+    def _multiply_matrices(
+        left: tuple[float, float, float, float, float, float],
+        right: tuple[float, float, float, float, float, float],
+    ) -> tuple[float, float, float, float, float, float]:
+        a1, b1, c1, d1, e1, f1 = left
+        a2, b2, c2, d2, e2, f2 = right
+        return (
+            a1 * a2 + c1 * b2,
+            b1 * a2 + d1 * b2,
+            a1 * c2 + c1 * d2,
+            b1 * c2 + d1 * d2,
+            a1 * e2 + c1 * f2 + e1,
+            b1 * e2 + d1 * f2 + f1,
+        )
+
+    @classmethod
+    def _parse_transform(cls, transform: str) -> tuple[float, float, float, float, float, float]:
+        matrix = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+        for name, raw_args in re.findall(r"(matrix|translate|scale)\(([^)]*)\)", transform or ""):
+            values = [float(value) for value in re.findall(r"[-+]?(?:\d*\.\d+|\d+)(?:[eE][-+]?\d+)?", raw_args)]
+            if name == "matrix" and len(values) >= 6:
+                next_matrix = tuple(values[:6])  # type: ignore[assignment]
+            elif name == "translate" and values:
+                next_matrix = (1.0, 0.0, 0.0, 1.0, values[0], values[1] if len(values) > 1 else 0.0)
+            elif name == "scale" and values:
+                next_matrix = (values[0], 0.0, 0.0, values[1] if len(values) > 1 else values[0], 0.0, 0.0)
+            else:
+                continue
+            matrix = cls._multiply_matrices(matrix, next_matrix)
+        return matrix
+
+    @staticmethod
+    def _apply_transform_to_bbox(
+        bbox: tuple[float, float, float, float],
+        matrix: tuple[float, float, float, float, float, float],
+    ) -> tuple[float, float, float, float]:
+        a, b, c, d, e, f = matrix
+        left, top, right, bottom = bbox
+        points = (
+            (left, top),
+            (right, top),
+            (right, bottom),
+            (left, bottom),
+        )
+        transformed = [(a * x + c * y + e, b * x + d * y + f) for x, y in points]
+        xs = [point[0] for point in transformed]
+        ys = [point[1] for point in transformed]
+        return min(xs), min(ys), max(xs), max(ys)
 
     @staticmethod
     def _format_bbox(bbox: tuple[float, float, float, float] | None) -> str:
@@ -666,7 +755,12 @@ class SVGHighlightRenderer:
         return raw_id.replace("_x5F_", "_").replace("x5F_", "_")
 
     @classmethod
-    def _collect_bounds(cls, group: ET.Element, fallback: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+    def _collect_bounds(
+        cls,
+        group: ET.Element,
+        fallback: tuple[float, float, float, float],
+        parent_map: dict[ET.Element, ET.Element] | None = None,
+    ) -> tuple[float, float, float, float]:
         min_x = float("inf")
         min_y = float("inf")
         max_x = float("-inf")
@@ -674,7 +768,7 @@ class SVGHighlightRenderer:
         for node in group.iter():
             if node is group:
                 continue
-            bbox = cls._element_bbox(node)
+            bbox = cls._element_bbox(node, parent_map)
             if bbox is None:
                 continue
             left, top, right, bottom = bbox
