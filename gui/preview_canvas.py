@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
 from types import SimpleNamespace
+import traceback
 
 from core.normalized_layout import NormalizedLayoutEngine
 from core.overlays.highlight_library import HighlightStyleManager
@@ -27,7 +27,7 @@ except ImportError:  # lets non-GUI CI import architecture modules without PySid
 if QLabel:
     class PreviewCanvas(QLabel):
         overlayMoved = Signal(str, float, float)
-        overlayTransformed = Signal(str, float, float)
+        overlayTransformed = Signal(str, float, float, float, float)
         overlayDeleteRequested = Signal(str)
         previewMotionDebug = Signal(str)
         SNAP_THRESHOLD = 10
@@ -165,8 +165,8 @@ if QLabel:
                     "active": layer.get("active", False),
                     "x": layer.get("x", 0.5),
                     "y": layer.get("y", 0.25),
-                    "w": 280,
-                    "h": 96,
+                    "w": layer.get("width", 280),
+                    "h": layer.get("height", 96),
                     "text": layer.get("text", ""),
                     "template": layer.get("style", "TikTok Bold"),
                     "font_size": layer.get("font_size", 118 / 1920),
@@ -380,10 +380,17 @@ if QLabel:
                 return
             template = template_manager.get(str(data["template"]))
             canvas = self._canvas_rect()
-            key = (kind, str(data["text"]), str(data["template"]), float(data["font_size"]), round(canvas.width()), round(canvas.height()))
+            svg_template = getattr(template_manager, "svg_template_path", lambda _name: None)(str(data["template"]))
+            svg_mtime_ns = 0
+            if svg_template:
+                try:
+                    from utils.ffmpeg_helper import app_root
+                    svg_mtime_ns = (app_root() / svg_template).stat().st_mtime_ns
+                except OSError:
+                    svg_mtime_ns = 0
+            key = (kind, str(data["text"]), str(data["template"]), float(data["font_size"]), round(canvas.width()), round(canvas.height()), svg_mtime_ns)
             pixmap = self._typography_pixmap_cache.get(key)
             if pixmap is None:
-                svg_template = getattr(template_manager, "svg_template_path", lambda _name: None)(str(data["template"]))
                 try:
                     if svg_template:
                         image = self._svg_highlight_renderer.render_image(
@@ -415,11 +422,9 @@ if QLabel:
                         round(canvas.width()),
                         round(canvas.height()),
                     )
-                    self.previewMotionDebug.emit(f"[SVG][ERROR] {exc}")
+                    self.previewMotionDebug.emit(f"[SVG][ERROR] {exc}\n{traceback.format_exc()}")
                 pixmap = QPixmap.fromImage(image)
                 self._typography_pixmap_cache[key] = pixmap
-            data["w"] = pixmap.width()
-            data["h"] = pixmap.height()
             transformed, transform = self._preview_transform(data, pixmap, canvas)
             center = QPointF(
                 canvas.left() + float(data["x"]) * canvas.width() + transform.x_offset,
@@ -429,9 +434,18 @@ if QLabel:
             display_w = max(1, round(transformed.width() * base_scale))
             display_h = max(1, round(transformed.height() * base_scale))
             display = transformed.scaled(display_w, display_h, Qt.KeepAspectRatio, Qt.SmoothTransformation) if abs(base_scale - 1.0) > 0.001 else transformed
-            current_rotation = float(data.get("rotation", 0.0))
-            visual_points = self._rotated_rect_points(center, display.width(), display.height(), current_rotation)
-            self._highlight_visual_centers[kind] = center
+            visible_rect = self._pixmap_visible_rect(display) if svg_template else QRectF(0, 0, display.width(), display.height())
+            data["w"] = visible_rect.width()
+            data["h"] = visible_rect.height()
+            current_rotation = float(data.get("rotation", 0.0)) + float(transform.rotation_delta)
+            visual_center = self._rotated_offset_point(
+                center,
+                visible_rect.center().x() - display.width() / 2.0,
+                visible_rect.center().y() - display.height() / 2.0,
+                current_rotation,
+            )
+            visual_points = self._rotated_rect_points(visual_center, visible_rect.width(), visible_rect.height(), current_rotation)
+            self._highlight_visual_centers[kind] = visual_center
             self._highlight_visual_handles[kind] = {
                 "delete": visual_points["top_left"],
                 "resize": visual_points["top_right"],
@@ -440,6 +454,8 @@ if QLabel:
                     (visual_points["top_right"].y() + visual_points["bottom_right"].y()) / 2.0,
                 ),
             }
+            if svg_template and kind == self._selected_highlight_key:
+                self._emit_svg_scale_debug(kind, display, visible_rect, visual_points, base_scale, transform.scale, canvas)
             painter.save()
             painter.translate(center)
             painter.rotate(current_rotation)
@@ -464,7 +480,8 @@ if QLabel:
                 canvas_rect = self._canvas_rect()
                 painter.restore()
                 self.previewMotionDebug.emit(
-                    f"[SVG_HANDLE] item boundingRect={display.width()}x{display.height()} center=({center.x():.1f},{center.y():.1f}) "
+                    f"[SVG_HANDLE] item boundingRect={display.width()}x{display.height()} visibleRect=({visible_rect.x():.1f},{visible_rect.y():.1f},{visible_rect.width():.1f},{visible_rect.height():.1f}) "
+                    f"center=({visual_center.x():.1f},{visual_center.y():.1f}) "
                     f"sceneBoundingRect=({min(p.x() for p in visual_points.values()):.1f},{min(p.y() for p in visual_points.values()):.1f},"
                     f"{(max(p.x() for p in visual_points.values())-min(p.x() for p in visual_points.values())):.1f},"
                     f"{(max(p.y() for p in visual_points.values())-min(p.y() for p in visual_points.values())):.1f}) canvas=({canvas_rect.left():.1f},{canvas_rect.top():.1f}) "
@@ -473,6 +490,31 @@ if QLabel:
                     f"rotate=({self._highlight_visual_handles[kind]['rotate'].x():.1f},{self._highlight_visual_handles[kind]['rotate'].y():.1f})"
                 )
             self._emit_motion_debug(kind, data, transform)
+
+        def _emit_svg_scale_debug(
+            self,
+            kind: str,
+            display,
+            visible_rect: QRectF,
+            visual_points: dict[str, QPointF],
+            base_scale: float,
+            animation_scale: float,
+            canvas: QRectF,
+        ) -> None:
+            frame = max(0, int(round(self._current_time * 30)))
+            cache_key = f"svg_scale_{kind}_{frame}"
+            if self._last_motion_debug.get(cache_key) == frame:
+                return
+            self._last_motion_debug[cache_key] = frame
+            selection_w = max(p.x() for p in visual_points.values()) - min(p.x() for p in visual_points.values())
+            selection_h = max(p.y() for p in visual_points.values()) - min(p.y() for p in visual_points.values())
+            self.previewMotionDebug.emit(
+                f"[SVG_SCALE_DEBUG] frame={frame} base_rendered_size={display.width()}x{display.height()} "
+                f"user_scale={base_scale:.6f} animation_scale={animation_scale:.6f} preview_to_output_scale=1.000000 "
+                f"final_draw_size={display.width()}x{display.height()} selection_rect={selection_w:.1f}x{selection_h:.1f} "
+                f"visible_pixmap_rect={visible_rect.width():.1f}x{visible_rect.height():.1f} "
+                f"output_resolution={round(canvas.width())}x{round(canvas.height())} render_mode=preview"
+            )
 
         @staticmethod
         def _highlight_font_pixels(font_ratio: float, canvas_height: int) -> int:
@@ -519,7 +561,17 @@ if QLabel:
             if center is None:
                 return
             data = self._overlays[key]
-            self._handle_drag = {"handle": handle, "key": key, "center": center, "base_scale": float(data.get("scale", 1.0)), "base_rotation": float(data.get("rotation", 0.0)), "start_distance": max(1.0, math.hypot(pos.x()-center.x(), pos.y()-center.y())), "start_angle": math.degrees(math.atan2(pos.y()-center.y(), pos.x()-center.x()))}
+            self._handle_drag = {
+                "handle": handle,
+                "key": key,
+                "center": center,
+                "base_scale": float(data.get("scale", 1.0)),
+                "base_rotation": float(data.get("rotation", 0.0)),
+                "base_width": float(data.get("w", 0.0)),
+                "base_height": float(data.get("h", 0.0)),
+                "start_distance": max(1.0, math.hypot(pos.x()-center.x(), pos.y()-center.y())),
+                "start_angle": math.degrees(math.atan2(pos.y()-center.y(), pos.x()-center.x())),
+            }
 
         def _update_handle_drag(self, pos: QPointF) -> None:
             if not self._handle_drag:
@@ -531,13 +583,63 @@ if QLabel:
                 scale = data["base_scale"] * (dist / data["start_distance"])
                 scale = min(4.0, max(0.2, scale))
                 self._overlays[data["key"]]["scale"] = scale
-                self.overlayTransformed.emit(data["key"], scale, self._overlays[data["key"]].get("rotation", 0.0))
+                width = float(data.get("base_width", 0.0)) * scale / max(float(data["base_scale"]), 0.001)
+                height = float(data.get("base_height", 0.0)) * scale / max(float(data["base_scale"]), 0.001)
+                self._overlays[data["key"]]["w"] = width
+                self._overlays[data["key"]]["h"] = height
+                self.previewMotionDebug.emit(
+                    f"[PREVIEW_TRANSFORM] key={data['key']} action=resize "
+                    f"x={float(self._overlays[data['key']].get('x', 0.5)):.4f} y={float(self._overlays[data['key']].get('y', 0.5)):.4f} "
+                    f"width={width:.1f} height={height:.1f} scale={scale:.4f} "
+                    f"rotation={float(self._overlays[data['key']].get('rotation', 0.0)):.2f} "
+                    f"font_size={float(self._overlays[data['key']].get('font_size', 0.0)):.6f} "
+                    f"style={self._overlays[data['key']].get('template')} animation={self._overlays[data['key']].get('motion')} anchor=center"
+                )
+                self.overlayTransformed.emit(data["key"], scale, self._overlays[data["key"]].get("rotation", 0.0), width, height)
             elif data["handle"] == "rotate":
                 angle = math.degrees(math.atan2(pos.y()-center.y(), pos.x()-center.x()))
                 rotation = data["base_rotation"] + (angle - data["start_angle"])
                 self._overlays[data["key"]]["rotation"] = rotation
-                self.overlayTransformed.emit(data["key"], self._overlays[data["key"]].get("scale", 1.0), rotation)
+                width = float(self._overlays[data["key"]].get("w", 0.0))
+                height = float(self._overlays[data["key"]].get("h", 0.0))
+                self.previewMotionDebug.emit(
+                    f"[PREVIEW_TRANSFORM] key={data['key']} action=rotate "
+                    f"x={float(self._overlays[data['key']].get('x', 0.5)):.4f} y={float(self._overlays[data['key']].get('y', 0.5)):.4f} "
+                    f"width={width:.1f} height={height:.1f} scale={float(self._overlays[data['key']].get('scale', 1.0)):.4f} "
+                    f"rotation={rotation:.2f} font_size={float(self._overlays[data['key']].get('font_size', 0.0)):.6f} "
+                    f"style={self._overlays[data['key']].get('template')} animation={self._overlays[data['key']].get('motion')} anchor=center"
+                )
+                self.overlayTransformed.emit(data["key"], self._overlays[data["key"]].get("scale", 1.0), rotation, width, height)
             self.update()
+
+        @staticmethod
+        def _rotated_offset_point(center: QPointF, dx: float, dy: float, rotation_deg: float) -> QPointF:
+            rad = math.radians(rotation_deg)
+            cos_a = math.cos(rad)
+            sin_a = math.sin(rad)
+            return QPointF(center.x() + dx * cos_a - dy * sin_a, center.y() + dx * sin_a + dy * cos_a)
+
+        @staticmethod
+        def _pixmap_visible_rect(pixmap: QPixmap) -> QRectF:
+            if pixmap.isNull():
+                return QRectF(0, 0, 1, 1)
+            image = pixmap.toImage()
+            min_x = image.width()
+            min_y = image.height()
+            max_x = -1
+            max_y = -1
+            step = 1
+            for y in range(0, image.height(), step):
+                for x in range(0, image.width(), step):
+                    if image.pixelColor(x, y).alpha() <= 4:
+                        continue
+                    min_x = min(min_x, x)
+                    min_y = min(min_y, y)
+                    max_x = max(max_x, x)
+                    max_y = max(max_y, y)
+            if max_x < min_x or max_y < min_y:
+                return QRectF(0, 0, pixmap.width(), pixmap.height())
+            return QRectF(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
 
         @staticmethod
         def _rotated_rect_points(center: QPointF, width: float, height: float, rotation_deg: float) -> dict[str, QPointF]:
