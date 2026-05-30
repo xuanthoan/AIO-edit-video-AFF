@@ -11,7 +11,7 @@ HIGHLIGHT_STYLE_NAMES = [
     "TikTok Shop", "Modern Minimal", "Bubble Cute", "Strong Black Yellow", "Hot Deal Red", "Luxury Gold",
     "Clean White", "Black Friday", "Summer Sale", "Mega Discount", "Viral Trend", "Elegant Beauty",
     "Cosmetic Pink", "Kitchen Home", "Food Delivery", "Gaming Neon", "Fashion Streetwear", "Minimal Premium",
-    "Blue Tag SVG", "Orange Tag SVG", "Random Style",
+    "Blue Tag SVG", "Orange Tag SVG", "Sticker Beauty SVG 1", "Sticker Beauty SVG 2", "Sticker Beauty SVG 3", "Random Style",
 ]
 
 HIGHLIGHT_ANIMATIONS = [
@@ -52,6 +52,12 @@ class HighlightStyleManager:
     SVG_TEMPLATE_PATH = "assets/vector_highlight_templates/simple_blue_tag_template.svg"
     ORANGE_SVG_STYLE_NAME = "Orange Tag SVG"
     ORANGE_SVG_TEMPLATE_PATH = "assets/vector_highlight_templates/orange_tag_template.svg"
+    STICKER_BEAUTY_SVG_STYLE_NAME = "Sticker Beauty SVG 1"
+    STICKER_BEAUTY_SVG_TEMPLATE_PATH = "assets/vector_highlight_templates/sticker_beauty_svg_1.svg"
+    STICKER_BEAUTY_SVG_2_STYLE_NAME = "Sticker Beauty SVG 2"
+    STICKER_BEAUTY_SVG_2_TEMPLATE_PATH = "assets/vector_highlight_templates/sticker_beauty_svg_2.svg"
+    STICKER_BEAUTY_SVG_3_STYLE_NAME = "Sticker Beauty SVG 3"
+    STICKER_BEAUTY_SVG_3_TEMPLATE_PATH = "assets/vector_highlight_templates/sticker_beauty_svg_3.svg"
     BUILT_INS = [
         TextTemplate("TikTok Bold", "#FFFFFF", "#111111", "#FF2D55", "black@0.45", ("#FFFFFF", "#111111")),
         TextTemplate("Flash Sale", "#FFFFFF", "#FF2D2D", "#FFD400", "#FFD400@0.55", ("#FFFFFF", "#FF2D2D")),
@@ -102,4 +108,10 @@ class HighlightStyleManager:
             return cls.SVG_TEMPLATE_PATH
         if name == cls.ORANGE_SVG_STYLE_NAME:
             return cls.ORANGE_SVG_TEMPLATE_PATH
+        if name == cls.STICKER_BEAUTY_SVG_STYLE_NAME:
+            return cls.STICKER_BEAUTY_SVG_TEMPLATE_PATH
+        if name == cls.STICKER_BEAUTY_SVG_2_STYLE_NAME:
+            return cls.STICKER_BEAUTY_SVG_2_TEMPLATE_PATH
+        if name == cls.STICKER_BEAUTY_SVG_3_STYLE_NAME:
+            return cls.STICKER_BEAUTY_SVG_3_TEMPLATE_PATH
         return None

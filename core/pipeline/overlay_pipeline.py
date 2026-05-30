@@ -80,6 +80,13 @@ class OverlayPipeline:
             graph.debug_events.append(
                 f"[OVERLAY] highlight index={index} asset={asset_path.name} style={highlight_overlay.style} region=minimal_bbox"
             )
+            graph.debug_events.append(
+                f"[EXPORT_TRANSFORM] key=highlight_{index} x={highlight_overlay.x:.4f} y={highlight_overlay.y:.4f} "
+                f"width={getattr(highlight_overlay, 'width', 0.0):.1f} height={getattr(highlight_overlay, 'height', 0.0):.1f} "
+                f"scale={getattr(highlight_overlay, 'scale', 1.0):.4f} rotation={getattr(highlight_overlay, 'rotation', 0.0):.2f} "
+                f"font_size={highlight_overlay.effective_font_ratio():.6f} style={highlight_overlay.style} "
+                f"animation={highlight_overlay.motion.value} anchor=center"
+            )
             graph.debug_events.append(self.layout.debug_font(highlight_overlay.effective_font_ratio(), job.video_height))
             graph.debug_events.append(self.highlight_engine.motion.debug_summary(highlight_overlay.motion, highlight_overlay.start_time, highlight_overlay.end_time, highlight_overlay.motion_speed, highlight_overlay.motion_strength))
             graph.inputs.extend(["-loop", "1", "-i", str(asset_path)])
