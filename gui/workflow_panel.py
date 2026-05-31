@@ -99,7 +99,7 @@ if QWidget:
             self.add_highlight_button = QPushButton("Add Highlight")
             self.remove_highlight_button = QPushButton("Remove Selected Highlight")
             self.highlight_text = QTextEdit(); self.highlight_text.setMaximumHeight(42); self.highlight_text.setPlaceholderText("SALE 50%, BEST SELLER, MUA NGAY...")
-            self.highlight_font_size = QSpinBox(); self.highlight_font_size.setRange(20, 160); self.highlight_font_size.setValue(64)
+            self.highlight_font_size = QSpinBox(); self.highlight_font_size.setRange(20, 250); self.highlight_font_size.setValue(64)
             self.highlight_style = QComboBox(); self.highlight_style.addItems(HIGHLIGHT_STYLE_NAMES)
             self.highlight_animation = QComboBox(); self.highlight_animation.addItems(HIGHLIGHT_ANIMATIONS); self.highlight_animation.setCurrentText("Pop")
 
