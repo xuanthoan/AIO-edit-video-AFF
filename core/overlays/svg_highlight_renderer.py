@@ -7,6 +7,7 @@ from xml.etree import ElementTree as ET
 SVG_NS = "http://www.w3.org/2000/svg"
 ET.register_namespace("", SVG_NS)
 
+from core.overlays.font_units import log_font_unit, normalize_overlay_font_size
 from utils.ffmpeg_helper import app_root
 
 try:
@@ -37,12 +38,14 @@ class SVGHighlightRenderer:
         item_scale: float = 1.0,
         preview_video_rect: tuple[float, float, float, float] | None = None,
         output_resolution: tuple[int, int] | None = None,
+        layer: str = "highlight_panel",
+        preview_scale: float = 1.0,
     ):
         if QImage is None:
             raise RuntimeError("PySide6 is required to render SVG highlight assets.")
         try:
             svg_bytes, output_width, output_height, text_layout = self._build_svg_bytes(
-                template_path, text, font_size, canvas_width, canvas_height
+                template_path, text, font_size, canvas_width, canvas_height, layer=layer, preview_scale=preview_scale
             )
         except Exception as exc:
             self._log_svg_error_debug(template_path, exc)
@@ -57,6 +60,8 @@ class SVGHighlightRenderer:
         self._logger.info("[SVG_SIZE] output_resolution=%s", output_resolution or (canvas_width, canvas_height))
         self._logger.info("[SVG_SIZE] final_render_width=%s", output_width)
         self._logger.info("[SVG_SIZE] final_render_height=%s", output_height)
+        self._logger.info("[SVG_SIZE] layer=%s", layer)
+        self._logger.info("[SVG_SIZE] preview_scale=%s", preview_scale)
         renderer = QSvgRenderer(QByteArray(svg_bytes))
         if not renderer.isValid():
             raise ValueError(f"Invalid SVG renderer for template: {template_path}")
@@ -94,6 +99,9 @@ class SVGHighlightRenderer:
         font_size: float,
         canvas_width: int,
         canvas_height: int | None = None,
+        *,
+        layer: str = "highlight_panel",
+        preview_scale: float = 1.0,
     ):
         source_path = self._resolve_template_source_path(template_path)
         self._logger.info("[SVG] loading template path=%s", source_path.resolve())
@@ -129,7 +137,7 @@ class SVGHighlightRenderer:
 
         video_height = int(canvas_height or self.REFERENCE_VIDEO_HEIGHT)
         resolved_font_size = self._resolve_font_size(text_node, font_size, vb_height)
-        effective_font_size = self._normalized_font_size_from_ui(resolved_font_size, video_height)
+        effective_font_size = normalize_overlay_font_size(resolved_font_size, video_height, preview_scale)
         max_line_width, line_height = self._measure_text_block(lines, effective_font_size)
 
         orange_stroke = self._find_optional(root, "orange_stroke")
@@ -295,6 +303,14 @@ class SVGHighlightRenderer:
         self._logger.info("[FONT_NORMALIZE] text_safe_area = %s", self._format_bbox((panel_x, panel_y, panel_right, panel_bottom)))
         self._logger.info("[FONT_NORMALIZE] auto_shrink_applied = %s", auto_shrink_applied)
         self._logger.info("[FONT_NORMALIZE] final_text_pixel_height = %s", effective_font_size)
+        log_font_unit(
+            self._logger,
+            layer=layer,
+            ui_font_size=resolved_font_size,
+            video_height=video_height,
+            preview_scale=preview_scale,
+            effective_font_size=effective_font_size,
+        )
 
         self._logger.info("[SVG_TEXT] raw input text = %r", raw_text)
         self._logger.info("[SVG_TEXT] lines = %s", lines)
@@ -777,13 +793,6 @@ class SVGHighlightRenderer:
         if node is None:
             raise ValueError(f"Template missing id='{element_id}'.")
         return node
-
-    @classmethod
-    def _normalized_font_size_from_ui(cls, font_size: float, video_height: int | None) -> float:
-        value = float(font_size)
-        if value <= 1.0:
-            return max(1.0, value * float(video_height or cls.REFERENCE_VIDEO_HEIGHT))
-        return max(1.0, value)
 
     @staticmethod
     def _resolve_font_size(text_node: ET.Element | None, font_size: float, base_height: float) -> float:

@@ -396,7 +396,7 @@ if QLabel:
                         image = self._svg_highlight_renderer.render_image(
                             svg_template,
                             str(data["text"]),
-                            self._highlight_font_pixels(float(data["font_size"]), round(canvas.height())),
+                            float(data["font_size"]),
                             round(canvas.width()),
                             round(canvas.height()),
                             mode="preview",
@@ -405,6 +405,7 @@ if QLabel:
                             item_scale=float(data.get("scale", 1.0)),
                             preview_video_rect=(canvas.left(), canvas.top(), canvas.width(), canvas.height()),
                             output_resolution=(round(canvas.width()), round(canvas.height())),
+                            layer="highlight_panel",
                         )
                     else:
                         image = self._typography_renderer.render_image(
@@ -413,6 +414,7 @@ if QLabel:
                             float(data["font_size"]),
                             round(canvas.width()),
                             round(canvas.height()),
+                            layer="highlight_panel" if kind == "highlight" else "text_panel",
                         )
                 except Exception as exc:
                     image = self._typography_renderer.render_image(
@@ -421,6 +423,7 @@ if QLabel:
                         float(data["font_size"]),
                         round(canvas.width()),
                         round(canvas.height()),
+                        layer="highlight_panel" if kind == "highlight" else "text_panel",
                     )
                     self.previewMotionDebug.emit(f"[SVG][ERROR] {exc}\n{traceback.format_exc()}")
                 pixmap = QPixmap.fromImage(image)
@@ -515,12 +518,6 @@ if QLabel:
                 f"visible_pixmap_rect={visible_rect.width():.1f}x{visible_rect.height():.1f} "
                 f"output_resolution={round(canvas.width())}x{round(canvas.height())} render_mode=preview"
             )
-
-        @staticmethod
-        def _highlight_font_pixels(font_ratio: float, canvas_height: int) -> int:
-            layout = NormalizedLayoutEngine()
-            normalized = layout.normalize_font_size(font_ratio)
-            return max(8, layout.denormalize_font_size(normalized, canvas_height))
 
 
         def _selected_handle_points(self) -> dict[str, QPointF]:

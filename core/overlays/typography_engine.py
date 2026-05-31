@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from core.normalized_layout import NormalizedLayoutEngine, REFERENCE_HEIGHT
+from core.overlays.font_units import log_font_unit, normalize_overlay_font_size
 from core.overlays.template_manager import TextTemplate
 from utils.ffmpeg_helper import app_root
 
@@ -53,14 +54,23 @@ class SocialTypographyRenderer:
         self.style = style or TypographyStyle()
         self.layout = NormalizedLayoutEngine()
 
-    def render_image(self, text: str, template: TextTemplate, font_size: float, canvas_width: int, canvas_height: int):
+    def render_image(
+        self,
+        text: str,
+        template: TextTemplate,
+        font_size: float,
+        canvas_width: int,
+        canvas_height: int,
+        *,
+        layer: str = "text_panel",
+        preview_scale: float = 1.0,
+    ):
         """Return a minimal text bounding-box image, never a full-frame canvas."""
         if QImage is None:
             raise RuntimeError("PySide6 is required to render social typography assets.")
         self._ensure_qt_app()
         self._load_fonts()
-        font_ratio = self.layout.normalize_font_size(font_size)
-        scaled_font = max(12, self.layout.denormalize_font_size(font_ratio, canvas_height))
+        scaled_font = max(12, normalize_overlay_font_size(font_size, canvas_height, preview_scale))
         font = self._font(scaled_font)
         probe = QImage(8, 8, QImage.Format_ARGB32_Premultiplied)
         probe.fill(Qt.transparent)
@@ -83,6 +93,14 @@ class SocialTypographyRenderer:
         self._logger.info("[FONT_NORMALIZE] text_safe_area = %sx%s", max_box_width, box_height)
         self._logger.info("[FONT_NORMALIZE] auto_shrink_applied = %s", False)
         self._logger.info("[FONT_NORMALIZE] final_text_pixel_height = %s", metrics.height())
+        log_font_unit(
+            self._logger,
+            layer=layer,
+            ui_font_size=font_size,
+            video_height=canvas_height,
+            preview_scale=preview_scale,
+            effective_font_size=scaled_font,
+        )
         shadow_pad = max(6, round(scaled_font * 0.18))
         image = QImage(box_width + shadow_pad * 2, box_height + shadow_pad * 2, QImage.Format_ARGB32_Premultiplied)
         image.fill(Qt.transparent)
@@ -106,9 +124,20 @@ class SocialTypographyRenderer:
         painter.end()
         return image
 
-    def render_png(self, path: Path, text: str, template: TextTemplate, font_size: float, canvas_width: int, canvas_height: int) -> Path:
+    def render_png(
+        self,
+        path: Path,
+        text: str,
+        template: TextTemplate,
+        font_size: float,
+        canvas_width: int,
+        canvas_height: int,
+        *,
+        layer: str = "text_panel",
+        preview_scale: float = 1.0,
+    ) -> Path:
         """Write only the typography region PNG; FFmpeg positions it on the final canvas."""
-        image = self.render_image(text, template, font_size, canvas_width, canvas_height)
+        image = self.render_image(text, template, font_size, canvas_width, canvas_height, layer=layer, preview_scale=preview_scale)
         path.parent.mkdir(parents=True, exist_ok=True)
         if not image.save(str(path), "PNG"):
             raise RuntimeError(f"Unable to write typography PNG: {path}")

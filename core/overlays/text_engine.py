@@ -70,13 +70,14 @@ class TextEngine:
                 svg_mtime_ns = 0
         key = (overlay.text, template_name, round(font_ratio, 6), canvas_width, canvas_height, svg_mtime_ns)
         path = self._asset_cache.get(key)
+        layer = "highlight_panel" if self.prefix == "highlight" else "text_panel"
         if path is None or not path.exists():
             path = self._new_asset_path()
             if svg_template:
                 image = self.svg_renderer.render_image(
                     svg_template,
                     overlay.text,
-                    self.layout.denormalize_font_size(font_ratio, canvas_height),
+                    font_ratio,
                     canvas_width,
                     canvas_height,
                     mode="export",
@@ -84,6 +85,7 @@ class TextEngine:
                     logical_height=getattr(overlay, "h", 0.0),
                     item_scale=float(getattr(overlay, "scale", 1.0) or 1.0),
                     output_resolution=(canvas_width, canvas_height),
+                    layer=layer,
                 )
                 self._log_svg_scale_debug(
                     overlay,
@@ -94,7 +96,7 @@ class TextEngine:
                 if not image.save(str(path), "PNG"):
                     raise RuntimeError(f"Unable to write SVG highlight PNG: {path}")
             else:
-                self.typography.render_png(path, overlay.text, template, font_ratio, canvas_width, canvas_height)
+                self.typography.render_png(path, overlay.text, template, font_ratio, canvas_width, canvas_height, layer=layer)
             self._asset_cache[key] = path
         if temp_files is not None and path not in temp_files:
             temp_files.append(path)
