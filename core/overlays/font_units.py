@@ -30,9 +30,16 @@ def log_font_unit(
     video_height: int,
     preview_scale: float,
     effective_font_size: float,
+    style: str | None = None,
 ) -> None:
     logger.info("[FONT_UNIT] layer=%s", layer)
     logger.info("[FONT_UNIT] ui_font_size=%s", ui_font_size)
     logger.info("[FONT_UNIT] video_height=%s", video_height)
     logger.info("[FONT_UNIT] preview_scale=%s", preview_scale)
     logger.info("[FONT_UNIT] effective_font_size=%s", effective_font_size)
+    logger.info("[FONT_UNIT_COMPARE] layer=%s", layer)
+    if layer == "highlight_panel" and style is not None:
+        logger.info("[FONT_UNIT_COMPARE] style=%s", style)
+    logger.info("[FONT_UNIT_COMPARE] ui_font_size=%s", ui_font_size)
+    logger.info("[FONT_UNIT_COMPARE] video_height=%s", video_height)
+    logger.info("[FONT_UNIT_COMPARE] effective_font_px=%s", effective_font_size)

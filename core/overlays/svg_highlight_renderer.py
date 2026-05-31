@@ -310,6 +310,7 @@ class SVGHighlightRenderer:
             video_height=video_height,
             preview_scale=preview_scale,
             effective_font_size=effective_font_size,
+            style=root_id,
         )
 
         self._logger.info("[SVG_TEXT] raw input text = %r", raw_text)

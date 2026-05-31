@@ -100,6 +100,7 @@ class SocialTypographyRenderer:
             video_height=canvas_height,
             preview_scale=preview_scale,
             effective_font_size=scaled_font,
+            style=template.name,
         )
         shadow_pad = max(6, round(scaled_font * 0.18))
         image = QImage(box_width + shadow_pad * 2, box_height + shadow_pad * 2, QImage.Format_ARGB32_Premultiplied)
