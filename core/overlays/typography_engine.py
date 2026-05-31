@@ -1,6 +1,7 @@
 """Shared Qt/QPainter typography renderer for preview and export parity."""
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from dataclasses import dataclass
@@ -42,6 +43,7 @@ class TypographyEngine:
 class SocialTypographyRenderer:
     """Render TikTok-style text into transparent RGBA assets using Qt."""
 
+    _logger = logging.getLogger(__name__)
     FONT_FILES = ("Montserrat-ExtraBold.ttf", "Poppins-ExtraBold.ttf")
     FONT_FAMILIES = ("Montserrat ExtraBold", "Montserrat", "Poppins ExtraBold", "Poppins")
     _fonts_loaded = False
@@ -74,6 +76,13 @@ class SocialTypographyRenderer:
         max_box_width = round(canvas_width * self.style.max_width_ratio)
         box_width = min(max_text_width + pad_x * 2, max_box_width)
         box_height = text_height + pad_y * 2
+        self._logger.info("[FONT_NORMALIZE] style = %s", template.name)
+        self._logger.info("[FONT_NORMALIZE] ui_font_size = %s", font_size)
+        self._logger.info("[FONT_NORMALIZE] video_height = %s", canvas_height)
+        self._logger.info("[FONT_NORMALIZE] effective_font_size = %s", scaled_font)
+        self._logger.info("[FONT_NORMALIZE] text_safe_area = %sx%s", max_box_width, box_height)
+        self._logger.info("[FONT_NORMALIZE] auto_shrink_applied = %s", False)
+        self._logger.info("[FONT_NORMALIZE] final_text_pixel_height = %s", metrics.height())
         shadow_pad = max(6, round(scaled_font * 0.18))
         image = QImage(box_width + shadow_pad * 2, box_height + shadow_pad * 2, QImage.Format_ARGB32_Premultiplied)
         image.fill(Qt.transparent)

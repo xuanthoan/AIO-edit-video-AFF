@@ -20,7 +20,7 @@ except ImportError:  # allows non-GUI CI imports when PySide6 is absent
 class SVGHighlightRenderer:
     BASE_WIDTH = 1073.0
     BASE_HEIGHT = 646.0
-    TEXT_SIZE_MULTIPLIER = 4.5
+    REFERENCE_VIDEO_HEIGHT = 1920.0
     _logger = logging.getLogger(__name__)
 
     def render_image(
@@ -42,7 +42,7 @@ class SVGHighlightRenderer:
             raise RuntimeError("PySide6 is required to render SVG highlight assets.")
         try:
             svg_bytes, output_width, output_height, text_layout = self._build_svg_bytes(
-                template_path, text, font_size, canvas_width
+                template_path, text, font_size, canvas_width, canvas_height
             )
         except Exception as exc:
             self._log_svg_error_debug(template_path, exc)
@@ -87,7 +87,14 @@ class SVGHighlightRenderer:
                 return alias_path
         return source_path
 
-    def _build_svg_bytes(self, template_path: str, text: str, font_size: float, canvas_width: int):
+    def _build_svg_bytes(
+        self,
+        template_path: str,
+        text: str,
+        font_size: float,
+        canvas_width: int,
+        canvas_height: int | None = None,
+    ):
         source_path = self._resolve_template_source_path(template_path)
         self._logger.info("[SVG] loading template path=%s", source_path.resolve())
         self._logger.info("[SVG] exists=%s", source_path.exists())
@@ -120,8 +127,9 @@ class SVGHighlightRenderer:
         if not lines or all(not line.strip() for line in lines):
             lines = [" "]
 
+        video_height = int(canvas_height or self.REFERENCE_VIDEO_HEIGHT)
         resolved_font_size = self._resolve_font_size(text_node, font_size, vb_height)
-        effective_font_size = resolved_font_size if is_sticker_beauty_svg_3 else resolved_font_size * self.TEXT_SIZE_MULTIPLIER
+        effective_font_size = self._normalized_font_size_from_ui(resolved_font_size, video_height)
         max_line_width, line_height = self._measure_text_block(lines, effective_font_size)
 
         orange_stroke = self._find_optional(root, "orange_stroke")
@@ -189,17 +197,13 @@ class SVGHighlightRenderer:
             else:
                 available_text_width = max(1.0, panel_w - padding_left - padding_right)
                 available_text_height = max(1.0, panel_h - padding_top - padding_bottom)
-            should_shrink = max_line_width > available_text_width or line_height * len(lines) > available_text_height
-            if is_sticker_beauty_svg_3:
-                # SVG 3's safe area is a placement guide only. Keep the requested
-                # Highlight Font Size responsive; only protect against extreme
-                # multi-line/text overflow instead of treating the safe-area height
-                # as a hard crop that collapses large user font sizes.
-                should_shrink = max_line_width > max(panel_w, available_text_width) * 1.75
+            # The Highlight Font Size control is the source of truth. Template
+            # safe areas guide placement and maximum width, but must not make
+            # short text tiny just because SVG viewBox units differ per design.
+            should_shrink = max_line_width > max(panel_w, available_text_width) * 1.75
             if should_shrink:
                 fit_scale = min(available_text_width / max(1.0, max_line_width), available_text_height / max(1.0, line_height * len(lines)))
-                if is_sticker_beauty_svg_3:
-                    fit_scale = max(0.75, fit_scale)
+                fit_scale = max(0.75, fit_scale)
                 effective_font_size = max(1.0, effective_font_size * min(1.0, fit_scale))
                 auto_shrink_applied = True
                 max_line_width, line_height = self._measure_text_block(lines, effective_font_size)
@@ -284,6 +288,14 @@ class SVGHighlightRenderer:
             self._logger.info("[SVG3_TEXT] used_text_rect = %s", self._format_bbox((panel_x, panel_y, panel_right, panel_bottom)))
             self._logger.info("[SVG3_TEXT] text_draw_pos = x=%s, y_values=%s", round(text_x, 3), [round(v, 3) for v in line_y_values])
 
+        self._logger.info("[FONT_NORMALIZE] style = %s", root_id)
+        self._logger.info("[FONT_NORMALIZE] ui_font_size = %s", resolved_font_size)
+        self._logger.info("[FONT_NORMALIZE] video_height = %s", video_height)
+        self._logger.info("[FONT_NORMALIZE] effective_font_size = %s", effective_font_size)
+        self._logger.info("[FONT_NORMALIZE] text_safe_area = %s", self._format_bbox((panel_x, panel_y, panel_right, panel_bottom)))
+        self._logger.info("[FONT_NORMALIZE] auto_shrink_applied = %s", auto_shrink_applied)
+        self._logger.info("[FONT_NORMALIZE] final_text_pixel_height = %s", effective_font_size)
+
         self._logger.info("[SVG_TEXT] raw input text = %r", raw_text)
         self._logger.info("[SVG_TEXT] lines = %s", lines)
         self._logger.info("[SVG_TEXT] font size = %s", resolved_font_size)
@@ -301,6 +313,7 @@ class SVGHighlightRenderer:
             "raw_text": raw_text,
             "lines": lines,
             "font_size": effective_font_size,
+            "font_pixel_size": effective_font_size,
             "text_x": text_x,
             "line_y_values": line_y_values,
             "panel_rect": (panel_x, panel_y, panel_w, panel_h),
@@ -315,12 +328,13 @@ class SVGHighlightRenderer:
         lines = layout.get("lines") or [" "]
         raw_text = str(layout.get("raw_text", ""))
         font_size = float(layout.get("font_size", 24.0))
+        font_pixel_size = float(layout.get("font_pixel_size", font_size))
         left, top, vb_w, vb_h = layout.get("view_box", (0.0, 0.0, 1.0, 1.0))
         panel_x, panel_y, panel_w, panel_h = layout.get("panel_rect", (0.0, 0.0, vb_w, vb_h))
         sx = image_w / max(1.0, vb_w)
         sy = image_h / max(1.0, vb_h)
 
-        font_px = max(1, int(round(font_size * sy)))
+        font_px = max(1, int(round(font_pixel_size)))
         font = QFont("Montserrat")
         font.setBold(True)
         font.setPixelSize(font_px)
@@ -764,10 +778,19 @@ class SVGHighlightRenderer:
             raise ValueError(f"Template missing id='{element_id}'.")
         return node
 
+    @classmethod
+    def _normalized_font_size_from_ui(cls, font_size: float, video_height: int | None) -> float:
+        value = float(font_size)
+        if value <= 1.0:
+            return max(1.0, value * float(video_height or cls.REFERENCE_VIDEO_HEIGHT))
+        return max(1.0, value)
+
     @staticmethod
     def _resolve_font_size(text_node: ET.Element | None, font_size: float, base_height: float) -> float:
         if font_size > 1.0:
             return max(10.0, float(font_size))
+        if font_size > 0.0:
+            return float(font_size)
         current = text_node.get("font-size") if text_node is not None else None
         if current:
             try:
