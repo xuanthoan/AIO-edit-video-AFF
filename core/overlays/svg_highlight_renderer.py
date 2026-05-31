@@ -118,6 +118,7 @@ class SVGHighlightRenderer:
             or source_path.name in {"sticker_beauty_svg_3.svg", "sticker_beauty_03.svg"}
             or normalized_root_id in {"sticker_beauty_svg_3", "sticker_beauty_03"}
         )
+        is_centered_tag_svg = source_path.name in {"simple_blue_tag_template.svg", "orange_tag_template.svg"}
 
         view_box = root.attrib.get("viewBox", "").strip().replace(",", " ").split()
         if len(view_box) != 4:
@@ -271,7 +272,7 @@ class SVGHighlightRenderer:
         self._logger.info("[SVG_TEXT_CLEAN] painter_text = %r", raw_text)
         self._logger.info("[SVG_TEXT_CLEAN] cache_invalidated = %s", True)
 
-        text_align = "center" if layout_source in {"text_safe_area", "text_layer", "sticker_group_safe_padding"} else "left"
+        text_align = "center" if is_centered_tag_svg or layout_source in {"text_safe_area", "text_layer", "sticker_group_safe_padding"} else "left"
         text_x = panel_x + (panel_w / 2.0 if text_align == "center" else padding_left)
         text_block_h = line_height * len(lines)
         first_line_y = panel_y + (panel_h - text_block_h) / 2.0 + line_height * 0.8
