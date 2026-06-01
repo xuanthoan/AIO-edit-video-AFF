@@ -12,3 +12,8 @@ exports/
 *.avi
 
 .env
+debug_filtergraph.txt
+debug_fade_filter.txt
+debug_last_svg_highlight.svg
+*.rendering.*
+.rendering.*

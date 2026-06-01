@@ -62,28 +62,68 @@ assets/vector_highlight_templates/       SVG highlight and Sticker Beauty templa
 docs/reference/                          architecture, rendering, pipeline, testing, decisions, and handoff notes
 ```
 
-## Runtime requirements
+## Requirements
 
 - Python 3.11+ recommended.
-- PySide6 for the GUI.
-- FFmpeg and ffprobe available either globally on `PATH` or through the app's configured binary lookup.
-- PySceneDetect is optional but recommended; when unavailable or when detection returns one or zero scenes, shuffle falls back to randomized time-based segments.
+- Python packages from `requirements.txt`:
+  - `PySide6` for the GUI and Qt SVG rendering.
+  - `scenedetect[opencv]` for automatic scene detection.
+- FFmpeg and ffprobe, either:
+  - copied into a local `bin/` directory beside the source tree or portable executable as `ffmpeg.exe` and `ffprobe.exe`; or
+  - installed globally and available on `PATH`.
 
-## Running the app
+PySceneDetect is recommended but the shuffle workflow can fall back to randomized time-based segments when detection returns one or zero scenes.
+
+## Installation from source
+
+```bash
+python -m venv .venv
+# Windows PowerShell:
+.venv\Scripts\Activate.ps1
+# macOS/Linux:
+# source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Then verify startup imports:
+
+```bash
+python -c "import main; print('AutoVideoAFF import OK')"
+```
+
+Run the app:
 
 ```bash
 python main.py
 ```
 
-## Building
+## FFmpeg dependency setup
+
+The renderer validates both `ffmpeg` and `ffprobe` before a batch starts. The lookup order is:
+
+1. `bin/ffmpeg.exe` and `bin/ffprobe.exe` under the application root.
+2. Executables directly under the application root.
+3. The same locations under the current working directory.
+4. System `PATH`.
+
+For portable Windows builds, place `ffmpeg.exe` and `ffprobe.exe` in `bin/` before building, or copy the `bin/` folder beside the generated `AutoVideoAFF.exe` after building. If the binaries are not bundled, the target machine must have FFmpeg installed on `PATH`.
+
+## Building a portable release
+
+Use the checked-in spec so assets are bundled and optional local FFmpeg binaries are included only when present:
 
 ```bash
-pyinstaller --noconfirm --onedir --windowed main.py
+python -m pip install "pyinstaller>=6.0"
+pyinstaller --noconfirm AutoVideoAFF.spec
 ```
 
-If using a spec file, bundle assets and FFmpeg binaries as appropriate for the target machine.
+The generated app folder is `dist/AutoVideoAFF/`. The spec includes `assets/`, PySide6 Qt SVG support, PySceneDetect/OpenCV hidden imports, and any existing `bin/ffmpeg(.exe)` / `bin/ffprobe(.exe)` files. This keeps source builds working even when `bin/` is absent while still supporting fully portable releases.
 
 ## Export behavior
 
-Rendering validates FFmpeg and ffprobe before processing a batch. Each queue item is rendered independently to the selected output directory. The renderer writes to a hidden `.rendering` output first, verifies the result with ffprobe, and then replaces/renames it to the final MP4 path. Failed videos are logged and skipped so the rest of the queue can continue.
+Rendering validates FFmpeg and ffprobe before processing a batch. Each queue item is rendered independently to an `output/` folder beside the first imported source video. If no source-specific output folder is available, relative output paths resolve under the application root. The renderer creates output directories automatically, writes to a hidden `.rendering` output first, verifies the result with ffprobe, and then replaces/renames it to the final MP4 path. Failed videos are logged and skipped so the rest of the queue can continue.
 
+## Release notes
+
+See `RELEASE_NOTES_v1.0.md` for the release feature summary, requirements, installation notes, known limitations, and changelog.
