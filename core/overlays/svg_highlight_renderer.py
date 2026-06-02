@@ -8,7 +8,7 @@ SVG_NS = "http://www.w3.org/2000/svg"
 ET.register_namespace("", SVG_NS)
 
 from core.overlays.font_units import log_font_unit, normalize_overlay_font_size
-from utils.ffmpeg_helper import app_root
+from utils.ffmpeg_helper import app_root, resource_path
 
 try:
     from PySide6.QtCore import QByteArray, Qt
@@ -78,7 +78,7 @@ class SVGHighlightRenderer:
 
     @staticmethod
     def _resolve_template_source_path(template_path: str):
-        source_path = app_root() / template_path
+        source_path = resource_path(template_path)
         if source_path.exists():
             return source_path
         aliases = {

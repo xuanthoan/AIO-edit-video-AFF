@@ -384,8 +384,8 @@ if QLabel:
             svg_mtime_ns = 0
             if svg_template:
                 try:
-                    from utils.ffmpeg_helper import app_root
-                    svg_mtime_ns = (app_root() / svg_template).stat().st_mtime_ns
+                    from utils.ffmpeg_helper import resource_path
+                    svg_mtime_ns = resource_path(svg_template).stat().st_mtime_ns
                 except OSError:
                     svg_mtime_ns = 0
             key = (kind, str(data["text"]), str(data["template"]), float(data["font_size"]), round(canvas.width()), round(canvas.height()), svg_mtime_ns)

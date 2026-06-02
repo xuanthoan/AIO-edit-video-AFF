@@ -19,15 +19,29 @@ class FFmpegNotFoundError(FileNotFoundError):
 
 
 def app_root() -> Path:
+    """Return the writable application directory beside the source or executable."""
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parents[1]
 
 
+def resource_root() -> Path:
+    """Return the read-only bundled resource root, supporting PyInstaller onefile."""
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        return Path(meipass).resolve()
+    return app_root()
+
+
+def resource_path(*parts: str | Path) -> Path:
+    """Resolve a runtime resource in development or a PyInstaller bundle."""
+    return resource_root().joinpath(*parts)
+
+
 def candidate_paths(name: str) -> list[Path]:
     exe_name = name if name.endswith(".exe") else f"{name}.exe"
     plain_name = name.removesuffix(".exe")
-    roots = [app_root(), Path.cwd()]
+    roots = [resource_root(), app_root(), Path.cwd()]
     candidates: list[Path] = []
     for root in roots:
         candidates.extend([root / "bin" / exe_name, root / "bin" / plain_name, root / exe_name, root / plain_name])

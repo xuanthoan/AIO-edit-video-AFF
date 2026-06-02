@@ -10,7 +10,7 @@ from pathlib import Path
 from core.normalized_layout import NormalizedLayoutEngine, REFERENCE_HEIGHT
 from core.overlays.font_units import log_font_unit, normalize_overlay_font_size
 from core.overlays.template_manager import TextTemplate
-from utils.ffmpeg_helper import app_root
+from utils.ffmpeg_helper import resource_path
 
 
 try:
@@ -155,7 +155,7 @@ class SocialTypographyRenderer:
     def _load_fonts(cls) -> None:
         if cls._fonts_loaded or QFontDatabase is None:
             return
-        font_dir = app_root() / "assets" / "fonts"
+        font_dir = resource_path("assets", "fonts")
         for filename in cls.FONT_FILES:
             font_path = font_dir / filename
             if font_path.exists():

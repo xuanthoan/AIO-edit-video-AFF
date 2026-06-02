@@ -11,7 +11,7 @@ from pathlib import Path
 from core.normalized_layout import NormalizedLayoutEngine, REFERENCE_HEIGHT
 from models.project_state import OverlaySettings
 from models.watermark_overlay import WatermarkInstance, WatermarkOverlay
-from utils.ffmpeg_helper import app_root
+from utils.ffmpeg_helper import resource_path
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QRectF, Qt
@@ -188,7 +188,7 @@ class WatermarkTextRenderer:
     def _load_fonts(cls) -> None:
         if cls._fonts_loaded:
             return
-        font_dir = app_root() / "assets" / "fonts"
+        font_dir = resource_path("assets", "fonts")
         for filename in cls.FONT_FILES:
             font_path = font_dir / filename
             if font_path.exists():

@@ -152,6 +152,6 @@ class TextEngine:
 
     @staticmethod
     def _resolve_svg_path(template_path: str) -> Path:
-        from utils.ffmpeg_helper import app_root
+        from utils.ffmpeg_helper import resource_path
 
-        return app_root() / template_path
+        return resource_path(template_path)
