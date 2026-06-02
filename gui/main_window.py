@@ -10,9 +10,9 @@ from pathlib import Path
 try:
     from PySide6.QtCore import QObject, Qt, QThread, QTimer, QUrl, Signal
     from PySide6.QtGui import QDesktopServices
-    from PySide6.QtWidgets import QFileDialog, QGroupBox, QHBoxLayout, QMainWindow, QPushButton, QScrollArea, QSplitter, QStatusBar, QTextEdit, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import QFileDialog, QGroupBox, QHBoxLayout, QMainWindow, QMessageBox, QPushButton, QScrollArea, QSplitter, QStatusBar, QTextEdit, QVBoxLayout, QWidget
 except ImportError:
-    QObject = Qt = QThread = QTimer = QUrl = Signal = QDesktopServices = QFileDialog = QGroupBox = QHBoxLayout = QMainWindow = QPushButton = QScrollArea = QSplitter = QStatusBar = QTextEdit = QVBoxLayout = QWidget = None
+    QObject = Qt = QThread = QTimer = QUrl = Signal = QDesktopServices = QFileDialog = QGroupBox = QHBoxLayout = QMainWindow = QMessageBox = QPushButton = QScrollArea = QSplitter = QStatusBar = QTextEdit = QVBoxLayout = QWidget = None
 
 from core.pipeline.shuffle_pipeline import SceneShufflePipeline
 from core.overlays.watermark_engine import WatermarkLayoutEngine
@@ -28,7 +28,7 @@ from models.overlay import MotionPreset
 from models.highlight_overlay import HighlightOverlay
 from models.project_state import ProjectState, TimelineSegment, WorkflowMode
 from models.sticker_overlay import StickerOverlay
-from utils.ffmpeg_helper import FFmpegNotFoundError, probe_duration
+from utils.ffmpeg_helper import FFmpegNotFoundError, find_executable, probe_duration
 from utils.file_helper import output_directory_for_videos
 
 
@@ -274,6 +274,29 @@ if QMainWindow:
             self._clear_preview_runtime_state(clear_canvas=False, log_session=True)
             self.timeline.set_playhead_time(0.0)
             self.preview.set_playhead_time(0.0)
+            QTimer.singleShot(0, self.check_ffmpeg_startup_status)
+
+        def check_ffmpeg_startup_status(self) -> None:
+            ffmpeg_path = find_executable("ffmpeg")
+            ffprobe_path = find_executable("ffprobe")
+            self.append_log("[FFMPEG]")
+            self.append_log(f"ffmpeg found: {ffmpeg_path or 'Không tìm thấy'}")
+            self.append_log(f"ffprobe found: {ffprobe_path or 'Không tìm thấy'}")
+            if ffmpeg_path and ffprobe_path:
+                return
+            missing = []
+            if not ffmpeg_path:
+                missing.append("ffmpeg.exe")
+            if not ffprobe_path:
+                missing.append("ffprobe.exe")
+            message = (
+                "Không tìm thấy " + ", ".join(missing) + ".\n\n"
+                "Preview, Scene Detect và Render cần FFmpeg để hoạt động. "
+                "Vui lòng dùng bản AutoVideoAFF đã được đóng gói kèm FFmpeg "
+                "hoặc đặt ffmpeg.exe và ffprobe.exe trong thư mục bin cạnh AutoVideoAFF.exe."
+            )
+            self.status.showMessage("Thiếu FFmpeg/FFprobe", 8000)
+            QMessageBox.warning(self, "Thiếu FFmpeg", message)
 
         def _wire(self) -> None:
             self.queue.changed.connect(self.set_videos)

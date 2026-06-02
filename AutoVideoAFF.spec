@@ -1,11 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 """Production onefile PyInstaller spec for the Windows AutoVideoAFF release."""
 from pathlib import Path
+import shutil
 
 block_cipher = None
 ROOT = Path(SPECPATH).resolve()
 ICON_PATH = ROOT / "creative.ico"
-
 
 
 def add_tree(source: str, target: str | None = None) -> list[tuple[str, str]]:
@@ -24,16 +24,27 @@ def add_file(source: str, target: str = ".") -> list[tuple[str, str]]:
     return [(str(path), target)]
 
 
-def optional_bin(name: str) -> tuple[str, str] | None:
-    """Bundle local FFmpeg binaries when present for portable Windows builds."""
-    for filename in (f"{name}.exe", name):
-        candidate = ROOT / "bin" / filename
-        if candidate.exists():
+def required_ffmpeg_binary(name: str) -> tuple[str, str]:
+    """Bundle FFmpeg/FFprobe so the EXE does not depend on user PATH setup."""
+    candidates = [
+        ROOT / "bin" / f"{name}.exe",
+        ROOT / "bin" / name,
+        ROOT / f"{name}.exe",
+        ROOT / name,
+    ]
+    path_match = shutil.which(f"{name}.exe") or shutil.which(name)
+    if path_match:
+        candidates.append(Path(path_match))
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
             return (str(candidate), "bin")
-    return None
+    raise FileNotFoundError(
+        f"Missing required {name}.exe for the production build. "
+        f"Place {name}.exe in {ROOT / 'bin'} or install it on the build machine PATH."
+    )
 
 
-binaries = [item for item in (optional_bin("ffmpeg"), optional_bin("ffprobe")) if item]
+binaries = [required_ffmpeg_binary("ffmpeg"), required_ffmpeg_binary("ffprobe")]
 
 datas = []
 datas += add_tree("assets", "assets")

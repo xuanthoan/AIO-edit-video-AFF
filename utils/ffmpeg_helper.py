@@ -41,20 +41,28 @@ def resource_path(*parts: str | Path) -> Path:
 def candidate_paths(name: str) -> list[Path]:
     exe_name = name if name.endswith(".exe") else f"{name}.exe"
     plain_name = name.removesuffix(".exe")
-    roots = [resource_root(), app_root(), Path.cwd()]
+    roots = [resource_root()]
+    writable_root = app_root()
+    if writable_root not in roots:
+        roots.append(writable_root)
     candidates: list[Path] = []
     for root in roots:
         candidates.extend([root / "bin" / exe_name, root / "bin" / plain_name, root / exe_name, root / plain_name])
     return candidates
 
 
-def executable(name: str, *, required: bool = True) -> str:
-    """Return an absolute executable path or raise a user-actionable error."""
+def find_executable(name: str) -> str | None:
+    """Find a bundled/app-local executable before falling back to PATH."""
     for candidate in candidate_paths(name):
         if candidate.exists() and candidate.is_file():
             return str(candidate)
 
-    path_match = shutil.which(name) or shutil.which(name.removesuffix(".exe"))
+    return shutil.which(name) or shutil.which(name.removesuffix(".exe"))
+
+
+def executable(name: str, *, required: bool = True) -> str:
+    """Return an absolute executable path or raise a user-actionable error."""
+    path_match = find_executable(name)
     if path_match:
         return path_match
 
